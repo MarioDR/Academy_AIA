@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lab-Safe</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" />
+</head>
+<body class="light" id="body">
+<div class="root">
+
+  <div class="topbar">
+    <span class="logo">Lab<span class="logo-sep">–</span>Safe</span>
+    <span class="topbar-sub">assistente sicurezza laboratorio</span>
+    <div class="live-pip">
+      <span class="live-dot"></span>
+      <span class="live-txt">LIVE</span>
+    </div>
+    <span class="topbar-time" id="topbarTime">—</span>
+    <button class="toggle-btn" id="toggleBtn">
+      <i class="ti ti-moon" id="toggleIcon"></i>
+      <span id="toggleLabel">Dark</span>
+    </button>
+  </div>
+
+  <div class="grid">
+
+    <div class="panel">
+      <div class="panel-header">
+        <i class="ti ti-video ph-icon"></i>
+        <span class="panel-title">Rilevamento operatore</span>
+        <span class="panel-badge" id="streamBadge">Webcam live</span>
+      </div>
+      <div class="mode-tabs">
+        <button class="tab active" id="tabWebcam">
+          <i class="ti ti-camera"></i> Webcam live
+        </button>
+        <button class="tab" id="tabUpload">
+          <i class="ti ti-upload"></i> Upload immagine
+        </button>
+      </div>
+      <div class="webcam-area" id="webcamArea">
+        <video id="videoFeed" autoplay playsinline style="display:none;width:100%;height:100%;object-fit:cover;border-radius:12px;"></video>
+        <div id="webcamPlaceholder" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+          <i class="ti ti-camera webcam-cam-icon"></i>
+          <span class="webcam-hint">Webcam non attiva</span>
+          <button class="webcam-btn" id="startBtn">
+            <i class="ti ti-player-play"></i> Avvia stream
+          </button>
+        </div>
+      </div>
+      <div class="upload-area" id="uploadArea" style="display:none;">
+        <i class="ti ti-photo-up webcam-cam-icon"></i>
+        <span class="webcam-hint">Trascina un'immagine o clicca</span>
+        <input type="file" id="fileInput" accept="image/*" style="display:none" />
+        <button class="webcam-btn" id="chooseFileBtn">
+          <i class="ti ti-upload"></i> Scegli immagine
+        </button>
+        <img id="uploadPreview" style="display:none;max-width:100%;max-height:200px;border-radius:12px;margin-top:8px;" />
+      </div>
+      <div class="bottom-stats">
+        <div class="stat-row">
+          <span class="stat-label">Confidenza</span>
+          <div class="conf-track"><div class="bar-fill bar-blue" id="confBar" style="width:0%"></div></div>
+          <span class="stat-val" id="confVal">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Stato stream</span>
+          <div class="conf-track"><div class="bar-fill bar-green" id="streamBar" style="width:0%"></div></div>
+          <span class="stat-val-g" id="streamVal">inattivo</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="right-col">
+
+      <div class="panel">
+        <div class="panel-header">
+          <i class="ti ti-shield-check ph-icon"></i>
+          <span class="panel-title">Stato DPI</span>
+          <span class="panel-badge" id="dpiBadge">in attesa</span>
+        </div>
+        <div class="dpi-list">
+          <div class="dpi-item idle" id="dpi-occhiali">
+            <span class="pulse-wrap pw-idle"><span class="pulse-dot"></span><span class="pulse-ring"></span></span>
+            Occhiali<span class="dpi-status">—</span>
+          </div>
+          <div class="dpi-item idle" id="dpi-guanti">
+            <span class="pulse-wrap pw-idle"><span class="pulse-dot"></span><span class="pulse-ring"></span></span>
+            Guanti<span class="dpi-status">—</span>
+          </div>
+          <div class="dpi-item idle" id="dpi-mascherina">
+            <span class="pulse-wrap pw-idle"><span class="pulse-dot"></span><span class="pulse-ring"></span></span>
+            Mascherina<span class="dpi-status">—</span>
+          </div>
+          <div class="dpi-item idle" id="dpi-camice">
+            <span class="pulse-wrap pw-idle"><span class="pulse-dot"></span><span class="pulse-ring"></span></span>
+            Camice<span class="dpi-status">—</span>
+          </div>
+        </div>
+        <div class="risk-strip" id="riskStrip">
+          <i class="ti ti-flask risk-icon"></i>
+          <span class="risk-label">Rischio attività</span>
+          <span class="risk-val" id="riskVal">Nessuna attività selezionata</span>
+        </div>
+      </div>
+
+      <div class="panel chat-panel">
+        <div class="panel-header">
+          <i class="ti ti-message-chatbot ph-icon"></i>
+          <span class="panel-title">Assistente Lab-Safe</span>
+          <span class="panel-badge">Dialogflow</span>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+          <div class="msg bot">
+            <div class="msg-sender">Lab-Safe</div>
+            Ciao! Quale attività vuoi svolgere oggi?
+          </div>
+        </div>
+        <div class="chat-input-row">
+          <input class="chat-input" id="chatInput" type="text" placeholder="Scrivi un messaggio…" />
+          <button class="send-btn" id="sendBtn" aria-label="Invia">
+            <i class="ti ti-arrow-up"></i>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

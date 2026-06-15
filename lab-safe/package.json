@@ -1,0 +1,14 @@
+{
+  "name": "lab-safe",
+  "version": "1.0.0",
+  "description": "Assistente intelligente per la sicurezza in laboratorio",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@google-cloud/dialogflow": "^7.6.2",
+    "dotenv": "^17.4.2",
+    "express": "^4.18.2"
+  }
+}
