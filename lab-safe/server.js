@@ -46,6 +46,22 @@ app.post('/api/dialogflow', function(req, res) {
     });
 });
 
+app.post('/api/dpi', function(req, res) {
+  var body       = req.body;
+  var occhiali   = body.occhiali   || false;
+  var guanti     = body.guanti     || false;
+  var mascherina = body.mascherina || false;
+  var camice     = body.camice     || false;
+  var confidenza = body.confidenza || 0;
+
+  console.log('DPI ricevuti da Teachable Machine:', body);
+
+  res.json({
+    status:    'ok',
+    received:  { occhiali, guanti, mascherina, camice, confidenza }
+  });
+});
+
 app.get('/', function(req, res) {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
