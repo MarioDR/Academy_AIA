@@ -8,6 +8,51 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" />
 </head>
 <body class="light" id="body">
+  <div class="welcome-screen" id="welcomeScreen">
+  <div class="welcome-topbar">
+    <button class="toggle-btn" id="welcomeToggle">
+      <i class="ti ti-moon" id="welcomeToggleIcon"></i>
+      <span id="welcomeToggleLabel">Dark</span>
+    </button>
+  </div>
+  <div class="welcome-logo">
+    <i class="ti ti-shield-check" aria-hidden="true"></i>
+  </div>
+  <div class="welcome-title">Lab-Safe</div>
+  <div class="welcome-sub">Assistente intelligente per la sicurezza in laboratorio</div>
+  <div class="welcome-steps">
+    <div class="welcome-step">
+      <div class="welcome-num">1</div>
+      <div>
+        <div class="welcome-step-title">Avvia webcam o carica immagine</div>
+        <div class="welcome-step-desc">Il sistema analizzerà i tuoi DPI in tempo reale</div>
+      </div>
+    </div>
+    <div class="welcome-step">
+      <div class="welcome-num">2</div>
+      <div>
+        <div class="welcome-step-title">Dichiara l'attività da svolgere</div>
+        <div class="welcome-step-desc">Es. "titolazione", "uso solventi", "fiamme"</div>
+      </div>
+    </div>
+    <div class="welcome-step">
+      <div class="welcome-num">3</div>
+      <div>
+        <div class="welcome-step-title">Indossa i DPI richiesti</div>
+        <div class="welcome-step-desc">Il sistema verificherà la conformità in automatico</div>
+      </div>
+    </div>
+    <div class="welcome-step">
+      <div class="welcome-num">4</div>
+      <div>
+        <div class="welcome-step-title">Attendi la conferma e procedi</div>
+        <div class="welcome-step-desc">Lab-Safe ti darà il via libera quando sei in sicurezza</div>
+      </div>
+    </div>
+  </div>
+  <div class="welcome-badge">GRUPPO 11 · AIA 2025/2026</div>
+  <button class="welcome-start" id="startAppBtn">Inizia</button>
+</div>
 <div class="root">
 
   <div class="topbar">
@@ -115,9 +160,15 @@
         <div class="chat-messages" id="chatMessages">
           <div class="msg bot">
             <div class="msg-sender">Lab-Safe</div>
-            Ciao! Quale attività vuoi svolgere oggi?
+            Ciao! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?
           </div>
-        </div>
+        <div class="quick-replies" id="quickReplies">
+        <button class="qr-btn" onclick="sendQuickReply('miscelazione acidi')">Miscelazione acidi</button>
+        <button class="qr-btn" onclick="sendQuickReply('uso fiamme')">Uso fiamme</button>
+        <button class="qr-btn" onclick="sendQuickReply('uso solventi')">Uso solventi</button>
+        <button class="qr-btn" onclick="sendQuickReply('titolazione')">Titolazione</button>
+      </div>
+    </div>
         <div class="chat-input-row">
           <input class="chat-input" id="chatInput" type="text" placeholder="Scrivi un messaggio…" />
           <button class="send-btn" id="sendBtn" aria-label="Invia">

@@ -209,6 +209,12 @@ function sendMessage() {
   processUserMessage(text.toLowerCase());
 }
 
+function sendQuickReply(text) {
+  document.getElementById('quickReplies').style.display = 'none';
+  addMessage('user', text);
+  processUserMessage(text);
+}
+
 function processUserMessage(text) {
   var dpiRilevati = Object.keys(dpiState).filter(function(k) { return dpiState[k] === true; });
   fetch('/api/dialogflow', {
@@ -284,5 +290,17 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('fileInput').addEventListener('change', handleUpload);
   document.getElementById('chatInput').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') sendMessage();
+  });
+
+  document.getElementById('welcomeToggle').addEventListener('click', function() {
+    toggleTheme();
+    var icon  = document.getElementById('welcomeToggleIcon');
+    var label = document.getElementById('welcomeToggleLabel');
+    icon.className    = currentTheme === 'dark' ? 'ti ti-sun'  : 'ti ti-moon';
+    label.textContent = currentTheme === 'dark' ? 'Light' : 'Dark';
+  });
+
+  document.getElementById('startAppBtn').addEventListener('click', function() {
+    document.getElementById('welcomeScreen').classList.add('hidden');
   });
 });
