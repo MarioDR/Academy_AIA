@@ -70,7 +70,9 @@ function startWebcam() {
       streamActive = true;
       document.getElementById('streamBar').style.width = '90%';
       document.getElementById('streamVal').textContent = 'attivo';
-      addMessage('bot', 'Stream avviato. Quale attività vuoi svolgere?');
+      if (!currentActivity) {
+        addMessage('bot', 'Stream avviato. Quale attività vuoi svolgere?');
+}
     })
     .catch(function() {
       addMessage('bot', 'Impossibile accedere alla webcam. Controlla i permessi del browser.');
@@ -96,7 +98,14 @@ function handleUpload(event) {
   var preview = document.getElementById('uploadPreview');
   preview.src = URL.createObjectURL(file);
   preview.style.display = 'block';
-  addMessage('bot', 'Immagine caricata: ' + file.name + '. Analisi in corso…');
+
+  if (!currentActivity) {
+    addMessage('bot', 'Immagine caricata. Dimmi prima quale attività vuoi svolgere.');
+    return;
+  }
+
+  addMessage('bot', 'Immagine caricata. Avvio analisi DPI…');
+  simulateDPIDetection(currentActivity);
 }
 
 function updateDPI(dpiKey, present, skipCheck) {
@@ -142,6 +151,26 @@ function setDPIIdle() {
 function updateConfidence(value) {
   document.getElementById('confBar').style.width = Math.round(value) + '%';
   document.getElementById('confVal').textContent  = Math.round(value) + '%';
+}
+
+function showAnalyzing(show) {
+  var area = document.getElementById('webcamPlaceholder');
+  var existing = document.getElementById('analyzingIndicator');
+  if (show) {
+    if (existing) return;
+    var ind = document.createElement('div');
+    ind.id = 'analyzingIndicator';
+    ind.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:10px;';
+    ind.innerHTML = '<div style="display:flex;gap:6px;align-items:center;">' +
+      '<span class="analyzing-dot"></span>' +
+      '<span class="analyzing-dot"></span>' +
+      '<span class="analyzing-dot"></span>' +
+      '</div>' +
+      '<span style="font-size:12px;font-weight:500;color:#007aff;">Analisi in corso…</span>';
+    area.appendChild(ind);
+  } else {
+    if (existing) existing.remove();
+  }
 }
 
 function updateRisk(activityKey) {
@@ -199,12 +228,21 @@ function processUserMessage(text) {
       updateRisk(currentActivity);
       setDPIIdle();
       if (streamActive || document.getElementById('uploadPreview').style.display !== 'none') {
-        setTimeout(function() { simulateDPIDetection(currentActivity); }, 1200);
-      } else {
-        addMessage('bot', 'Avvia la webcam o carica un\'immagine per analizzare i DPI.');
-      }   
+      setTimeout(function() { simulateDPIDetection(currentActivity); }, 1200);
     }
-    if (data.reply) addMessage('bot', data.reply);
+  }
+
+  if (data.reply) {
+    var tipo = 'bot';
+    if (data.intent === 'Default Fallback Intent' || (!data.attivita && !currentActivity)) {
+      tipo = 'alert';
+    }
+    addMessage(tipo, data.reply);
+  }
+
+  if (!data.attivita && !currentActivity && (!data.intent || data.intent === 'Default Fallback Intent')) {
+    addMessage('bot', 'Attività non riconosciuta. Prova con: "miscelazione acidi", "uso fiamme", "uso solventi" o "titolazione".');
+  }
   })
   .catch(function() {
     addMessage('bot', 'Errore di connessione al server. Riprova.');
@@ -212,21 +250,23 @@ function processUserMessage(text) {
 }
 
 function simulateDPIDetection(activityKey) {
+  showAnalyzing(true);                         
   var richiesti = DPI_RICHIESTI[activityKey] || [];
   var tutti     = ['occhiali', 'guanti', 'mascherina', 'camice'];
   var mancante  = richiesti[Math.floor(Math.random() * richiesti.length)];
-
-  tutti.forEach(function(d) {
-    updateDPI(d, richiesti.indexOf(d) !== -1 ? d !== mancante : false, true);
-  });
-  checkCompliance();
-  updateConfidence(65 + Math.random() * 20);
-
-  setTimeout(function() {
-    tutti.forEach(function(d) { updateDPI(d, richiesti.indexOf(d) !== -1, true); });
+  setTimeout(function() {                      
+    showAnalyzing(false);                       
+    tutti.forEach(function(d) {
+      updateDPI(d, richiesti.indexOf(d) !== -1 ? d !== mancante : false, true);
+    });
     checkCompliance();
-    updateConfidence(88 + Math.random() * 10);
-  }, 3000);
+    updateConfidence(65 + Math.random() * 20);
+    setTimeout(function() {
+      tutti.forEach(function(d) { updateDPI(d, richiesti.indexOf(d) !== -1, true); });
+      checkCompliance();
+      updateConfidence(88 + Math.random() * 10);
+    }, 3000);
+  }, 1500);                                    
 }
 
 document.addEventListener('DOMContentLoaded', function() {
