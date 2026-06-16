@@ -5,6 +5,12 @@ import os
 from pathlib import Path
 from ultralytics import YOLO
 
+# --- SUPPORTO PER FILE HEIC/HEIF (iPhone/Samsung) ---
+from PIL import Image
+from pillow_heif import register_heif_opener
+register_heif_opener()
+# ----------------------------------------------------
+
 # Costanti
 TARGET_SIZE = (224, 224)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -101,6 +107,7 @@ def main():
     parser = argparse.ArgumentParser(description="Lab-Safe OpenCV Layer")
     parser.add_argument("--mode", type=str, required=True, choices=["webcam", "image", "folder"], help="Modalità di esecuzione: 'webcam', 'image' o 'folder'")
     parser.add_argument("--source", type=str, default="", help="Percorso dell'immagine o della cartella (richiesto se mode='image' o 'folder')")
+    parser.add_argument("--output", type=str, default="", help="Percorso personalizzato di output dove salvare i ritagli (opzionale)")
     args = parser.parse_args()
 
     print(f"[INFO] Caricamento modello YOLOv8 Pose da: {DEFAULT_MODEL_PATH}")
@@ -115,7 +122,19 @@ def main():
             return
             
         print(f"[INFO] Elaborazione immagine: {args.source}")
-        frame = cv2.imread(args.source)
+        
+        # Gestione lettura HEIC per immagine singola
+        file_path = Path(args.source)
+        if file_path.suffix.lower() in [".heic", ".heif"]:
+            try:
+                pil_img = Image.open(str(file_path)).convert('RGB')
+                frame = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+            except Exception as e:
+                print(f"[ERRORE] Impossibile leggere il file HEIC: {e}")
+                return
+        else:
+            frame = cv2.imread(args.source)
+
         if frame is None:
             print("[ERRORE] Impossibile caricare l'immagine.")
             return
@@ -169,18 +188,36 @@ def main():
             print(f"[ERRORE] Il percorso specificato non è una cartella: {args.source}")
             return
             
-        session_face_dir = os.path.join(DEFAULT_FACE_RAW_DIR, folder_path.name)
-        session_body_dir = os.path.join(DEFAULT_BODY_RAW_DIR, folder_path.name)
-        
+        # Logica di reindirizzamento dell'output
+        if args.output:
+            custom_out = Path(args.output)
+            session_face_dir = os.path.join(custom_out, "Face", folder_path.name)
+            session_body_dir = os.path.join(custom_out, "Full-Body", folder_path.name)
+        else:
+            session_face_dir = os.path.join(DEFAULT_FACE_RAW_DIR, folder_path.name)
+            session_body_dir = os.path.join(DEFAULT_BODY_RAW_DIR, folder_path.name)
+            
         os.makedirs(session_face_dir, exist_ok=True)
         os.makedirs(session_body_dir, exist_ok=True)
         
-        valid_extensions = {".jpg", ".jpeg", ".png", ".bmp"}
+        # Aggiunta estensioni HEIC
+        valid_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".heic", ".heif"}
         print(f"[INFO] Elaborazione e salvataggio in:\n -> {session_face_dir}\n -> {session_body_dir}")
         
         for file_path in folder_path.iterdir():
             if file_path.is_file() and file_path.suffix.lower() in valid_extensions:
-                frame = cv2.imread(str(file_path))
+                
+                # Lettura adattiva (HEIC o standard)
+                if file_path.suffix.lower() in [".heic", ".heif"]:
+                    try:
+                        pil_img = Image.open(str(file_path)).convert('RGB')
+                        frame = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+                    except Exception as e:
+                        print(f"[WARNING] Errore di lettura HEIC su {file_path.name}: {e}")
+                        continue
+                else:
+                    frame = cv2.imread(str(file_path))
+
                 if frame is None:
                     print(f"[WARNING] Impossibile caricare l'immagine: {file_path.name}")
                     continue
@@ -188,7 +225,6 @@ def main():
                 _, face_rois, body_rois = process_frame(frame, model)
                 
                 for idx, f_roi in enumerate(face_rois):
-                    # I file mantengono il loro nome ma sono isolati nella cartella della sessione
                     save_path = os.path.join(session_face_dir, f"{file_path.stem}_face_{idx}.jpg")
                     cv2.imwrite(save_path, f_roi)
                     
