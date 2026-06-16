@@ -1,6 +1,8 @@
 import cv2
 import argparse
 import numpy as np
+import os
+from pathlib import Path
 from ultralytics import YOLO
 
 # Costanti
@@ -107,8 +109,8 @@ def process_frame(frame, model):
 
 def main():
     parser = argparse.ArgumentParser(description="Lab-Safe OpenCV Layer")
-    parser.add_argument("--mode", type=str, required=True, choices=["webcam", "image"], help="Modalità di esecuzione: 'webcam' o 'image'")
-    parser.add_argument("--source", type=str, default="", help="Percorso dell'immagine (richiesto se mode='image')")
+    parser.add_argument("--mode", type=str, required=True, choices=["webcam", "image", "folder"], help="Modalità di esecuzione: 'webcam', 'image' o 'folder'")
+    parser.add_argument("--source", type=str, default="", help="Percorso dell'immagine o della cartella (richiesto se mode='image' o 'folder')")
     args = parser.parse_args()
 
     print("[INFO] Caricamento modello YOLOv8 Pose...")
@@ -166,6 +168,45 @@ def main():
                 
         cap.release()
         cv2.destroyAllWindows()
+
+    elif args.mode == "folder":
+        if not args.source:
+            print("[ERRORE] Devi specificare --source se usi --mode folder")
+            return
+            
+        folder_path = Path(args.source)
+        if not folder_path.is_dir():
+            print(f"[ERRORE] Il percorso specificato non è una cartella: {args.source}")
+            return
+            
+        face_dir = folder_path / "face"
+        body_dir = folder_path / "body"
+        
+        face_dir.mkdir(exist_ok=True)
+        body_dir.mkdir(exist_ok=True)
+        
+        valid_extensions = {".jpg", ".jpeg", ".png", ".bmp"}
+        
+        print(f"[INFO] Elaborazione immagini nella cartella: {folder_path}")
+        
+        for file_path in folder_path.iterdir():
+            if file_path.is_file() and file_path.suffix.lower() in valid_extensions:
+                frame = cv2.imread(str(file_path))
+                if frame is None:
+                    print(f"[WARNING] Impossibile caricare l'immagine: {file_path.name}")
+                    continue
+                    
+                _, face_rois, body_rois = process_frame(frame, model)
+                
+                for idx, f_roi in enumerate(face_rois):
+                    save_path = face_dir / f"{file_path.stem}_face_{idx}.jpg"
+                    cv2.imwrite(str(save_path), f_roi)
+                    
+                for idx, b_roi in enumerate(body_rois):
+                    save_path = body_dir / f"{file_path.stem}_body_{idx}.jpg"
+                    cv2.imwrite(str(save_path), b_roi)
+                    
+        print("[INFO] Elaborazione cartella completata.")
 
 if __name__ == "__main__":
     main()
