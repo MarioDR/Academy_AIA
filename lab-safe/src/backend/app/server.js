@@ -41,6 +41,8 @@ if (count.n === 0) {
   insert.run('uso_fiamme',         JSON.stringify(['occhiali','guanti','camice']),              'Alto');
   insert.run('uso_solventi',       JSON.stringify(['occhiali','guanti','mascherina']),          'Medio');
   insert.run('titolazione',        JSON.stringify(['occhiali','guanti']),                       'Medio');
+  insert.run('osservazione_microscopia', JSON.stringify(['occhiali']), 'Basso');
+  insert.run('manipolazione_campioni',   JSON.stringify(['occhiali', 'mascherina']), 'Basso');
 }
 
 app.use(express.json());

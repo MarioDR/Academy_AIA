@@ -3,6 +3,8 @@ var DPI_RICHIESTI = {
   uso_fiamme:         ['occhiali', 'guanti', 'camice'],
   uso_solventi:       ['occhiali', 'guanti', 'mascherina'],
   titolazione:        ['occhiali', 'guanti'],
+  osservazione_microscopia: ['occhiali'],
+  manipolazione_campioni:   ['occhiali', 'mascherina'],
 };
 
 var RISCHIO_LABEL = {
@@ -10,18 +12,25 @@ var RISCHIO_LABEL = {
   uso_fiamme:         'Alto · uso fiamme libere',
   uso_solventi:       'Medio · uso solventi',
   titolazione:        'Medio · titolazione',
+  osservazione_microscopia: 'Basso · osservazione microscopia',
+  manipolazione_campioni:   'Basso · manipolazione campioni',
 };
 
 var ATTIVITA_ALIAS = {
-  'miscelazione acidi': 'miscelazione_acidi',
-  'acidi':              'miscelazione_acidi',
-  'fiamme':             'uso_fiamme',
-  'fiamma':             'uso_fiamme',
-  'bunsen':             'uso_fiamme',
-  'solventi':           'uso_solventi',
-  'solvente':           'uso_solventi',
-  'titolazione':        'titolazione',
-  'titolo':             'titolazione',
+  'miscelazione acidi':  'miscelazione_acidi',
+  'acidi':               'miscelazione_acidi',
+  'fiamme':              'uso_fiamme',
+  'fiamma':              'uso_fiamme',
+  'bunsen':              'uso_fiamme',
+  'solventi':            'uso_solventi',
+  'solvente':            'uso_solventi',
+  'titolazione':         'titolazione',
+  'titolo':              'titolazione',
+  'microscopia':         'osservazione_microscopia',
+  'microscopio':         'osservazione_microscopia',
+  'campioni':            'manipolazione_campioni',
+  'manipolazione':       'manipolazione_campioni',
+  
 };
 
 var sessioneSalvata = false;
@@ -268,10 +277,14 @@ function processUserMessage(text) {
 
     if (data.reply) {
   var tipo = 'bot';
+  var testo = data.reply;
   if (data.intent === 'Default Fallback Intent') {
     tipo = 'alert';
   }
-  addMessage(tipo, data.reply);
+  if (data.intent === 'Default Welcome Intent') {
+    testo = 'Ciao ' + operatoreCorrente + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?';
+  }
+  addMessage(tipo, testo);
 }
 
     if (!data.attivita && !currentActivity && (!data.intent || data.intent === 'Default Fallback Intent')) {
@@ -539,6 +552,9 @@ document.getElementById('speakerBtn').addEventListener('click', function() {
   speechOutputEnabled = !speechOutputEnabled;
   var icon = document.getElementById('speakerIcon');
   icon.className = speechOutputEnabled ? 'ti ti-volume' : 'ti ti-volume-off';
+  if (!speechOutputEnabled) {
+    window.speechSynthesis.cancel(); // ferma subito qualsiasi voce in corso
+  }
 });
 inizializzaVoce();
 document.getElementById('micBtn').addEventListener('click', toggleMic);  
