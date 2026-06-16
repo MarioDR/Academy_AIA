@@ -24,6 +24,7 @@ var ATTIVITA_ALIAS = {
   'titolo':             'titolazione',
 };
 
+var sessioneSalvata = false;
 var speechOutputEnabled = false;
 var operatoreCorrente = 'Operatore';
 var currentTheme    = 'light';
@@ -129,17 +130,18 @@ function checkCompliance() {
     badge.textContent = 'Tutti OK';
     badge.className   = 'panel-badge ok';
     addMessage('success', '✓ DPI verificati. Puoi procedere in sicurezza.');
-    salvaSessione('conforme');
+    if (!sessioneSalvata) { salvaSessione('conforme'); sessioneSalvata = true; }
   } else {
     badge.textContent = mancanti.length + (mancanti.length > 1 ? ' mancanti' : ' mancante');
     badge.className   = 'panel-badge warn';
     var lista = mancanti.map(function(d) { return d.charAt(0).toUpperCase() + d.slice(1); }).join(', ');
     addMessage('alert', 'Attenzione: mancano ' + lista + '. Indossali prima di procedere.');
-    salvaSessione('non conforme');
+    if (!sessioneSalvata) { salvaSessione('non conforme'); sessioneSalvata = true; }
   }
 }
 
 function setDPIIdle() {
+   sessioneSalvata = false;
   ['occhiali','guanti','mascherina','camice'].forEach(function(k) {
     dpiState[k] = null;
     var item = document.getElementById('dpi-' + k);
@@ -221,7 +223,7 @@ function addMessage(type, text) {
   div.appendChild(document.createTextNode(text));
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
-  if (type === 'bot' || type === 'success' || type === 'alert') {
+  if (speechOutputEnabled && (type === 'bot' || type === 'success' || type === 'alert')) {
   leggiRisposta(text);
 }
 }
@@ -248,7 +250,7 @@ function processUserMessage(text) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       message:     text,
-      sessionId:   'user-001',
+      sessionId: operatoreCorrente.replace(/\s+/g, '_').toLowerCase() + '_' + Date.now(),
       dpiRilevati: dpiRilevati,
       attivita:    currentActivity,
     }),

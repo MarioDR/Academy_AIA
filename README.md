@@ -10,7 +10,7 @@
 
 Lab-Safe è un sistema in tempo reale per il monitoraggio e la verifica dei Dispositivi di Protezione Individuale (DPI) in un laboratorio chimico, basato su computer vision e machine learning.
 
-Il sistema riconosce lo stato di sicurezza dell'operatore attraverso l'analisi visiva dei DPI indossati (area testa e corpo intero), traducendo i risultati in avvisi di sicurezza e attivando un chatbot conversazionale in grado di guidare l'utente in linguaggio naturale.
+Il sistema riconosce lo stato di sicurezza dell'operatore attraverso l'analisi visiva dei DPI indossati, traducendo i risultati in avvisi di sicurezza e attivando un chatbot conversazionale in grado di guidare l'utente in linguaggio naturale.
 
 ### Pipeline
 
@@ -22,19 +22,20 @@ Webcam / Immagine → OpenCV (estrazione ROI) → Teachable Machine (classificaz
 
 ## Funzionalità principali
 
-- **Rilevamento DPI in tempo reale** tramite webcam o upload immagine
-- **Estrazione Region of Interest** tramite Face Detection e Full Body Detection (OpenCV)
-- **Classificazione** tramite due modelli Teachable Machine dedicati
+- **Rilevamento DPI** tramite webcam live o upload immagine
+- **Estrazione Region of Interest** tramite YOLOv8 Pose con OpenCV
+- **Classificazione DPI** tramite modello Teachable Machine (Face)
 - **Chatbot conversazionale** (Dialogflow) che guida l'operatore
 - **Verifica conformità** DPI per attività specifiche di laboratorio
-- **Interfaccia moderna** con tema light/dark e indicatori animati
+- **Storico sessioni** con statistiche e grafici
+- **Interfaccia user-friendly** con tema light/dark, input vocale e TTS
 
 ### Modelli Teachable Machine
 
-| Modello | Classi |
-|---|---|
-| Face | Occhiali, Mascherina, Entrambi, Nessuno |
-| Full Body | Camice, Guanti, Entrambi, Nessuno |
+| Modello | Classi | Stato |
+|---|---|---|
+| Face | Occhiali, Mascherina, Entrambi, Nessuno | 🟢 In sviluppo |
+| Full Body | Camice, Guanti, Entrambi, Nessuno | 🔴 Release futura |
 
 ### Attività supportate
 
@@ -51,6 +52,7 @@ Webcam / Immagine → OpenCV (estrazione ROI) → Teachable Machine (classificaz
 
 - [Node.js](https://nodejs.org/) v18+
 - npm v9+
+- Python 3.9+ con pip
 - Account Google Cloud con Dialogflow API abilitata
 
 ---
@@ -62,15 +64,18 @@ Webcam / Immagine → OpenCV (estrazione ROI) → Teachable Machine (classificaz
 git clone https://github.com/MarioDR/Academy_AIA.git
 cd Academy_AIA/lab-safe
 
-# 2. Installare le dipendenze
+# 2. Installare le dipendenze Node
 npm install
 
-# 3. Configurare le variabili d'ambiente (vedi sezione Configurazione)
+# 3. Installare le dipendenze Python
+pip install -r requirements.txt
 
-# 4. Avviare il server
+# 4. Configurare le variabili d'ambiente (vedi sezione Configurazione)
+
+# 5. Avviare il server
 npm start
 
-# 5. Aprire nel browser
+# 6. Aprire nel browser
 http://localhost:3000
 ```
 
@@ -80,67 +85,65 @@ http://localhost:3000
 
 ### 1. Credenziali Dialogflow
 
-Creare un file `.env` nella cartella `lab-safe/`:
+Creare un file `env.txt` nella cartella `lab-safe/config/`:
 
 ```
-GOOGLE_APPLICATION_CREDENTIALS=./credentials.json
 DIALOGFLOW_PROJECT_ID=newagent-jgxd
+GOOGLE_APPLICATION_CREDENTIALS=./config/credentials.json
+PORT=3000
 ```
 
-Inserire il file `credentials.json` (service account Google Cloud) nella cartella `lab-safe/`.  
-⚠️ **Necessario perchè non bisogna mai committare `credentials.json` e `.env` su GitHub.**
+Inserire il file `credentials.json` (service account Google Cloud) nella cartella `lab-safe/config/`.  
 
 ### 2. Struttura del progetto
 
 ```
 lab-safe/
-├── server.js              # Server Express + route API
-├── public/
-│   ├── index.html         # Interfaccia principale
-│   ├── style.css          # Stile 
-│   └── app.js             # Logica frontend
-├── .env                   # Variabili d'ambiente (non committare)
-├── credentials.json       # Credenziali Google (non committare)
+├── config/
+│   ├── credentials.json       # Credenziali Google Cloud 
+│   └── env.txt                # Variabili d'ambiente 
+├── data/
+│   ├── models/
+│   │   └── yolov8n-pose.pt    # Modello YOLOv8 Pose
+│   └── raw/
+│       ├── Face/              # Dataset grezzo volti (per TM)
+│       └── Full-Body/         # Dataset grezzo corpo (per TM)
+├── database/
+│   └── labsafe.db             # Database SQLite 
+├── docs/
+│   └── AIA_G11_PropostaProgettuale.pdf
+├── src/
+│   ├── backend/
+│   │   ├── app/
+│   │   │   └── server.js      # Server Express + API REST
+│   │   └── vision/
+│   │       └── detector.py    # Estrazione ROI con OpenCV + YOLOv8
+│   └── frontend/
+│       ├── index.html         # Interfaccia principale
+│       ├── style.css          # Stile
+│       └── app.js             # Logica frontend
+├── package.json
+├── requirements.txt
 ├── .gitignore
 └── README.md
 ```
 
 ---
 
-## Integrazione Teachable Machine
+### Utilizzo di detector.py
 
-Quando i modelli Teachable Machine saranno addestrati, il backend Python invierà i risultati al frontend tramite l'endpoint REST:
+`detector.py` usa YOLOv8 Pose per estrarre ROI facciali e corporee da immagini o webcam. È utile principalmente per **costruire il dataset** da fornire a Teachable Machine.
 
+```bash
+# Elabora una cartella di immagini ed esporta le ROI nel dataset
+python src/backend/vision/detector.py --mode folder --source /percorso/cartella
+
+# Testa su una singola immagine
+python src/backend/vision/detector.py --mode image --source /percorso/immagine.jpg
+
+# Testa in tempo reale con webcam
+python src/backend/vision/detector.py --mode webcam
 ```
-POST /api/dpi
-Content-Type: application/json
-
-{
-  "occhiali":   true,
-  "guanti":     false,
-  "mascherina": true,
-  "camice":     true,
-  "confidenza": 87.4
-}
-```
-
-Oppure chiamando direttamente le funzioni in `app.js`:
-
-```js
-// Aggiorna lo stato di ogni DPI (true = rilevato, false = non rilevato)
-updateDPI('occhiali',   true,  true);
-updateDPI('guanti',     false, true);
-updateDPI('mascherina', true,  true);
-updateDPI('camice',     true,  true);
-
-// Aggiorna la barra di confidenza (0-100)
-updateConfidence(87.4);
-
-// Lancia la verifica conformità
-checkCompliance();
-```
-
-> La funzione `simulateDPIDetection` in `app.js` è un placeholder per la demo — va rimossa o disabilitata quando Teachable Machine sarà integrato.
 
 ---
 
@@ -149,22 +152,41 @@ checkCompliance();
 Il server comunica con Dialogflow Essentials tramite il Google Cloud SDK.  
 Gli intent configurati sono:
 
-| Intent | Trigger | Descrizione |
-|---|---|---|
-| `Inizio_Attività` | Testo utente | L'operatore dichiara l'attività da svolgere |
-| `DPI_Mancante_Fallback` | Evento `DPI_MANCANTE` | Segnala DPI mancanti e attende nuova acquisizione |
-| `Conferma_DPI_Indossati` | Evento `DPI_CONFORMI` | Conferma la conformità e dà il via libera |
+| Intent | Descrizione |
+|---|---|
+| `Inizio_Attività` | L'operatore dichiara l'attività da svolgere |
+| `DPI_Mancante_Fallback` | Segnala DPI mancanti e attende nuova acquisizione |
+| `Conferma_DPI_Indossati` | Conferma la conformità e dà il via libera |
 
 ---
 
 ## Scenario demo
 
-1. L'operatore dichiara l'attività nel chatbot: *"Voglio lavorare con i solventi"*
-2. OpenCV estrae la Region of Interest dal frame webcam
-3. Teachable Machine classifica i DPI rilevati sui due modelli (Face + Full Body)
-4. Se un DPI manca: *"Attenzione: per l'attività selezionata è richiesta la mascherina. Indossarla prima di procedere."*
-5. L'operatore indossa il DPI mancante
-6. Il sistema rileva il cambio di stato: *"DPI verificati. Puoi procedere con l'esperimento."*
+1. L'operatore inserisce il proprio nome e accede all'interfaccia
+2. Dichiara l'attività nel chatbot: *"Voglio lavorare con i solventi"*
+3. Avvia la webcam o carica un'immagine
+4. OpenCV + YOLOv8 estrae la ROI facciale
+5. Teachable Machine classifica i DPI rilevati
+6. Se un DPI manca: *"Attenzione: per l'attività selezionata è richiesta la mascherina. Indossarla prima di procedere."*
+7. L'operatore indossa il DPI mancante
+8. Il sistema rileva il cambio di stato: *"DPI verificati. Puoi procedere con l'esperimento."*
+9. La sessione viene salvata nel database e visibile nello storico
+
+---
+
+## Roadmap
+
+| Funzionalità | Stato |
+|---|---|
+| UI completa (light/dark, storico, statistiche) | 🟢 Completato |
+| Backend Express + SQLite | 🟢 Completato |
+| Integrazione Dialogflow | 🟢 Completato |
+| Estrazione ROI con YOLOv8 Pose | 🟢 Completato |
+| Modello Teachable Machine — Face | 🟠 In sviluppo |
+| Integrazione TM → frontend | 🟠 In attesa del modello |
+| Modello Teachable Machine — Full Body | 🔴 Release futura |
+| Ottimizzazione luce variabile | 🔴 Release futura |
+| Flussi conversazionali aggiuntivi | 🔴 Release futura |
 
 ---
 
@@ -173,19 +195,16 @@ Gli intent configurati sono:
 | Layer | Tecnologia |
 |---|---|
 | Frontend | HTML, CSS, JavaScript |
-| Backend | Node.js, Express |
+| Backend | Node.js, Express, SQLite (better-sqlite3) |
 | Chatbot | Google Dialogflow Essentials |
-| Computer Vision | OpenCV (Python) |
-| Classificazione | Google Teachable Machine (2 modelli) |
+| Computer Vision | OpenCV + YOLOv8 Pose (Python) |
+| Classificazione | Google Teachable Machine |
 
 ---
 
-## Note per i collaboratori
+## Note per sviluppi futuri
 
-- Non committare mai `credentials.json` o `.env`
-- Per sviluppo con auto-reload: `npm install -g nodemon` poi `nodemon server.js`
-- Il frontend comunica col backend tramite `POST /api/dialogflow` e `POST /api/dpi`
-- La simulazione DPI (`simulateDPIDetection` in `app.js`) va rimossa quando Teachable Machine sarà integrato
+- Il modello Full Body (camice e guanti) è già supportato dall'architettura — basterà alimentare `updateDPI('camice', ...)` e `updateDPI('guanti', ...)` con il secondo modello TM
 
 ---
 
