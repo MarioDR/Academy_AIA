@@ -33,6 +33,8 @@ var ATTIVITA_ALIAS = {
   
 };
 
+var tmModel = null;
+var tmModelURL = '/models/face/';
 var sessioneSalvata = false;
 var speechOutputEnabled = false;
 var operatoreCorrente = 'Operatore';
@@ -80,11 +82,14 @@ function startWebcam() {
       video.style.display = 'block';
       document.getElementById('webcamPlaceholder').style.display = 'none';
       streamActive = true;
+      avviaLoopTM();
       document.getElementById('streamBar').style.width = '90%';
       document.getElementById('streamVal').textContent = 'attivo';
-      if (!currentActivity) {
-        addMessage('bot', 'Stream avviato. Quale attività vuoi svolgere?');
-      }
+      if (currentActivity) {
+        setTimeout(function() { classificaConTM(); }, 1200);
+      } else {
+      addMessage('bot', 'Stream avviato. Quale attività vuoi svolgere?');
+    }
     })
     .catch(function() {
       addMessage('bot', 'Impossibile accedere alla webcam. Controlla i permessi del browser.');
@@ -100,6 +105,7 @@ function stopWebcam() {
   video.style.display = 'none';
   document.getElementById('webcamPlaceholder').style.display = 'flex';
   streamActive = false;
+  fermaLoopTM();
   document.getElementById('streamBar').style.width = '0%';
   document.getElementById('streamVal').textContent = 'inattivo';
 }
@@ -116,8 +122,10 @@ function handleUpload(event) {
     return;
   }
 
+  sessioneSalvata = false; // reset per nuova immagine
+  setDPIIdle();            // reset stato DPI
   addMessage('bot', 'Immagine caricata. Avvio analisi DPI…');
-  simulateDPIDetection(currentActivity);
+  setTimeout(function() { classificaConTM(); }, 500);
 }
 
 function updateDPI(dpiKey, present, skipCheck) {
@@ -138,14 +146,20 @@ function checkCompliance() {
   if (mancanti.length === 0) {
     badge.textContent = 'Tutti OK';
     badge.className   = 'panel-badge ok';
-    addMessage('success', '✓ DPI verificati. Puoi procedere in sicurezza.');
-    if (!sessioneSalvata) { salvaSessione('conforme'); sessioneSalvata = true; }
+    if (!sessioneSalvata) {
+      addMessage('success', '✓ DPI verificati. Puoi procedere in sicurezza.');
+      salvaSessione('conforme');
+      sessioneSalvata = true;
+    }
   } else {
     badge.textContent = mancanti.length + (mancanti.length > 1 ? ' mancanti' : ' mancante');
     badge.className   = 'panel-badge warn';
-    var lista = mancanti.map(function(d) { return d.charAt(0).toUpperCase() + d.slice(1); }).join(', ');
-    addMessage('alert', 'Attenzione: mancano ' + lista + '. Indossali prima di procedere.');
-    if (!sessioneSalvata) { salvaSessione('non conforme'); sessioneSalvata = true; }
+    if (!sessioneSalvata) {
+      var lista = mancanti.map(function(d) { return d.charAt(0).toUpperCase() + d.slice(1); }).join(', ');
+      addMessage('alert', 'Attenzione: mancano ' + lista + '. Indossali prima di procedere.');
+      salvaSessione('non conforme');
+      sessioneSalvata = true;
+    }
   }
 }
 
@@ -270,12 +284,16 @@ function processUserMessage(text) {
       currentActivity = data.attivita;
       updateRisk(currentActivity);
       setDPIIdle();
-      if (streamActive || document.getElementById('uploadPreview').style.display !== 'none') {
-        setTimeout(function() { simulateDPIDetection(currentActivity); }, 1200);
-      }
+    if (streamActive) {
+      setTimeout(function() { classificaConTM(); }, 1200);
+    } else if (document.getElementById('uploadPreview').style.display !== 'none') {
+      setTimeout(function() { classificaConTM(); }, 1200);
+    } else {
+      addMessage('bot', 'Attività registrata. Avvia la webcam o carica un\'immagine per analizzare i DPI.');
     }
+}
 
-    if (data.reply) {
+   if (data.reply) {
   var tipo = 'bot';
   var testo = data.reply;
   if (data.intent === 'Default Fallback Intent') {
@@ -284,7 +302,9 @@ function processUserMessage(text) {
   if (data.intent === 'Default Welcome Intent') {
     testo = 'Ciao ' + operatoreCorrente + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?';
   }
-  addMessage(tipo, testo);
+  if (data.intent !== 'Inizio_Attivita') {
+    addMessage(tipo, testo);
+  }
 }
 
     if (!data.attivita && !currentActivity && (!data.intent || data.intent === 'Default Fallback Intent')) {
@@ -314,6 +334,74 @@ function simulateDPIDetection(activityKey) {
       updateConfidence(88 + Math.random() * 10);
     }, 3000);
   }, 1500);
+}
+
+async function caricaModelloTM() {
+  try {
+    var modelURL    = tmModelURL + 'model.json';
+    var metadataURL = tmModelURL + 'metadata.json';
+    tmModel = await tmImage.load(modelURL, metadataURL);
+    console.log('[TM] Modello caricato.');
+  } catch(e) {
+    console.error('[TM] Errore caricamento modello:', e);
+  }
+}
+
+async function classificaConTM() {
+  if (!tmModel) return;
+  if (!currentActivity) return;
+
+  var source = null;
+  if (streamActive) {
+    var video = document.getElementById('videoFeed');
+    if (!video || video.readyState < 2) return; // video non ancora pronto
+    source = video;
+  } else {
+    var preview = document.getElementById('uploadPreview');
+    if (!preview || preview.style.display === 'none' || !preview.src) return;
+    source = preview;
+  }
+
+  try {
+    var predictions = await tmModel.predict(source);
+    console.log('[TM] Predictions:', predictions);
+
+    var occhiali   = false;
+    var mascherina = false;
+    var maxConf    = 0;
+
+    predictions.forEach(function(p) {
+      if (p.probability > maxConf) maxConf = p.probability;
+      var cls = p.className.toLowerCase();
+      if (cls === 'occhiali'   && p.probability > 0.6) occhiali   = true;
+      if (cls === 'mascherina' && p.probability > 0.6) mascherina = true;
+      if (cls === 'entrambi'   && p.probability > 0.6) { occhiali = true; mascherina = true; }
+    });
+
+    updateDPI('occhiali',   occhiali,   true);
+    updateDPI('mascherina', mascherina, true);
+    updateDPI('guanti',     false,      true);
+    updateDPI('camice',     false,      true);
+    updateConfidence(Math.round(maxConf * 100));
+    checkCompliance();
+  } catch(e) {
+    console.error('[TM] Errore classificazione:', e);
+  }
+}
+
+var tmInterval = null;
+
+function avviaLoopTM() {
+  if (tmInterval) clearInterval(tmInterval);
+  tmInterval = setInterval(function() {
+    if (streamActive && currentActivity && tmModel) {
+      classificaConTM();
+    }
+  }, 2000); // ogni 2 secondi
+}
+
+function fermaLoopTM() {
+  if (tmInterval) { clearInterval(tmInterval); tmInterval = null; }
 }
 
 function apriStorico() {
@@ -596,4 +684,5 @@ document.getElementById('tabStatistiche').addEventListener('click', function() {
     document.getElementById('welcomeScreen').classList.add('hidden');
     addMessage('bot', 'Ciao ' + nome + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?');
   });
+  caricaModelloTM();
 });

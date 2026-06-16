@@ -50,6 +50,8 @@ app.use(express.json());
 // FILE STATICI: punta alla cartella lab-safe/src/frontend
 app.use(express.static(path.join(__dirname, '../../frontend')));
 
+app.use('/models', express.static(path.join(__dirname, '../../../data/models/teachable_machine')));
+
 // DIALOGFLOW
 app.post('/api/dialogflow', function(req, res) {
   var dialogflow = require('@google-cloud/dialogflow');
@@ -80,9 +82,15 @@ app.post('/api/dialogflow', function(req, res) {
     .then(function(responses) {
       var result   = responses[0].queryResult;
       var params   = result.parameters && result.parameters.fields;
-      var attivita = params && params.tipo_esperimento
-                     ? params.tipo_esperimento.stringValue
-                     : body.attivita;
+      var attivita = body.attivita;
+      if (params && params.tipo_esperimento) {
+        var tp = params.tipo_esperimento;
+        if (tp.listValue && tp.listValue.values && tp.listValue.values.length > 0) {
+          attivita = tp.listValue.values[0].stringValue;
+        } else if (tp.stringValue) {
+          attivita = tp.stringValue;
+        }
+      }
       res.json({
         reply:    result.fulfillmentText,
         intent:   result.intent ? result.intent.displayName : null,
