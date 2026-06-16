@@ -1,5 +1,6 @@
+# Dipendenze
 node_modules/
-credentials.json
-.env
+
+# Log e output MAC
 .DS_Store
 **/.DS_Store
