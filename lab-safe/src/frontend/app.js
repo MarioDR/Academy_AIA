@@ -36,7 +36,7 @@ var ATTIVITA_ALIAS = {
 var tmModel = null;
 var tmModelURL = '/models/face/';
 var sessioneSalvata = false;
-var speechOutputEnabled = false;
+var speechOutputEnabled = true;
 var operatoreCorrente = 'Operatore';
 var currentTheme    = 'light';
 var streamActive    = false;
@@ -145,33 +145,35 @@ function updateDPI(dpiKey, present, skipCheck) {
   if (!skipCheck) checkCompliance();
 }
 
+var ultimoEsitoCheck = null;
+
 function checkCompliance() {
   if (!currentActivity) return;
   var richiesti = DPI_RICHIESTI[currentActivity] || [];
   var mancanti  = richiesti.filter(function(d) { return dpiState[d] === false; });
   var badge     = document.getElementById('dpiBadge');
+  var esitoAttuale = mancanti.length === 0 ? 'conforme' : mancanti.join(',');
+
+  if (esitoAttuale === ultimoEsitoCheck) return; // nessun cambiamento, non fare nulla
+  ultimoEsitoCheck = esitoAttuale;
+
   if (mancanti.length === 0) {
     badge.textContent = 'Tutti OK';
     badge.className   = 'panel-badge ok';
-    if (!sessioneSalvata) {
-      addMessage('success', '✓ DPI verificati. Puoi procedere in sicurezza.');
-      salvaSessione('conforme');
-      sessioneSalvata = true;
-    }
+    addMessage('success', '✓ DPI verificati. Puoi procedere in sicurezza.');
+    if (!sessioneSalvata) { salvaSessione('conforme'); sessioneSalvata = true; }
   } else {
     badge.textContent = mancanti.length + (mancanti.length > 1 ? ' mancanti' : ' mancante');
     badge.className   = 'panel-badge warn';
-    if (!sessioneSalvata) {
-      var lista = mancanti.map(function(d) { return d.charAt(0).toUpperCase() + d.slice(1); }).join(', ');
-      addMessage('alert', 'Attenzione: mancano ' + lista + '. Indossali prima di procedere.');
-      salvaSessione('non conforme');
-      sessioneSalvata = true;
-    }
+    var lista = mancanti.map(function(d) { return d.charAt(0).toUpperCase() + d.slice(1); }).join(', ');
+    addMessage('alert', 'DPI mancanti: ' + lista + '. Indossali prima di procedere.');
+    if (!sessioneSalvata) { salvaSessione('non conforme'); sessioneSalvata = true; }
   }
 }
 
 function setDPIIdle() {
    sessioneSalvata = false;
+   ultimoEsitoCheck = null;
   ['occhiali','guanti','mascherina','camice'].forEach(function(k) {
     dpiState[k] = null;
     var item = document.getElementById('dpi-' + k);
@@ -311,6 +313,14 @@ function processUserMessage(text) {
   }
   if (data.intent !== 'Inizio_Attivita') {
     addMessage(tipo, testo);
+  }
+  if (data.intent === 'Cambio_Attivita') {
+    currentActivity = null;
+    updateRisk(null);
+    setDPIIdle();
+    sessioneSalvata = false;
+    fermaLoopTM();
+    document.getElementById('quickReplies').style.display = '';
   }
 }
 
@@ -700,6 +710,10 @@ document.addEventListener('DOMContentLoaded', function() {
         RISCHIO_LABEL[row.attivita] = row.rischio + ' · ' + row.attivita.replace(/_/g, ' ');
       });
     });
+
+  document.getElementById('operatoreInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') document.getElementById('startAppBtn').click();
+  });  
 
 document.getElementById('speakerBtn').addEventListener('click', function() {
   speechOutputEnabled = !speechOutputEnabled;
