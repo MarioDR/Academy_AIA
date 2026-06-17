@@ -34,6 +34,9 @@ var currentTheme    = 'light';
 var streamActive    = false;
 var currentActivity = null;
 var dpiState        = { occhiali: null, guanti: null, mascherina: null, camice: null };
+var statoStabile = { occhiali: null, mascherina: null };
+var contatoreStabile = { occhiali: 0, mascherina: 0 };
+var SOGLIA_STABILITA = 3;
 
 function updateClock() {
   var now = new Date();
@@ -63,6 +66,10 @@ function switchTab(tab) {
     document.getElementById('tabWebcam').classList.remove('active');
     document.getElementById('streamBadge').textContent = 'Upload';
     stopWebcam();
+    var roiOverlay = document.getElementById('roiOverlay');
+    if (roiOverlay) roiOverlay.style.display = 'none';
+    var classOverlay = document.getElementById('classOverlay');
+    if (classOverlay) classOverlay.style.display = 'none';
   }
 }
 
@@ -77,9 +84,11 @@ function startWebcam() {
       video.style.display = 'block';
       document.getElementById('webcamPlaceholder').style.display = 'none';
       streamActive = true;
+      document.getElementById('livePip').style.visibility = 'visible';
       avviaLoopTM();
       document.getElementById('streamBar').style.width = '90%';
       document.getElementById('streamVal').textContent = 'attivo';
+      document.getElementById('streamVal').style.color = '#34c759';
       if (currentActivity) {
         setTimeout(function() { classificaConTM(); }, 1200);
       } else {
@@ -100,9 +109,11 @@ function stopWebcam() {
   video.style.display = 'none';
   document.getElementById('webcamPlaceholder').style.display = 'flex';
   streamActive = false;
+  document.getElementById('livePip').style.visibility = 'hidden';
   fermaLoopTM();
   document.getElementById('streamBar').style.width = '0%';
   document.getElementById('streamVal').textContent = 'inattivo';
+  document.getElementById('streamVal').style.color = '#ff3b30';
 }
 
 /**
@@ -182,6 +193,8 @@ function setDPIIdle() {
    sessioneSalvata = false;
    ultimoEsitoCheck = null;
    analisiAvviata = false;
+   statoStabile = { occhiali: null, mascherina: null };
+   contatoreStabile = { occhiali: 0, mascherina: 0 };
   ['occhiali','guanti','mascherina','camice'].forEach(function(k) {
     dpiState[k] = null;
     var item = document.getElementById('dpi-' + k);
@@ -196,6 +209,8 @@ function setDPIIdle() {
   var item = document.getElementById('dpi-' + k);
   if (item) item.classList.remove('dpi-inactive');
 });
+  var overlay = document.getElementById('classOverlay');
+  if (overlay) overlay.style.display = 'none';
 }
 
 function setDPIPending(activityKey) {
@@ -463,7 +478,31 @@ async function classificaConTM() {
     var roiImg = new Image();
     roiImg.onload = async function() {
       var predictions = await tmModel.predict(roiImg);
-      console.log('[TM] Predictions on ROI:', predictions);
+      // Overlay classificazione
+      var overlay = document.getElementById('classOverlay');
+      if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'classOverlay';
+      overlay.style.cssText = 'position:absolute; top:8px; left:8px; background:rgba(0,122,255,0.75); border-radius:8px; padding:8px 10px; width:148px; z-index:10;';
+      overlay.innerHTML = '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;"><i class="ti ti-shield-check" style="font-size:13px;color:#ffffff;"></i><div><div style="font-size:9px;font-weight:500;color:#ffffff;letter-spacing:0.03em;">Classificazione</div><div style="font-size:8px;color:rgba(255,255,255,0.7);">Face Model</div></div></div><div id="classOverlayBars"></div>';
+      parentArea.appendChild(overlay);
+    }
+
+var classi = predictions.slice().sort(function(a,b){ return b.probability - a.probability; });
+var barsHtml = classi.map(function(p) {
+  var pct = Math.round(p.probability * 100);
+  var isTop = p === classi[0];
+  var barColor = isTop ? '#30d158' : '#636366';
+  var valColor = isTop ? '#30d158' : '#aeaeb2';
+  return '<div style="margin-bottom:4px;">' +
+    '<div style="display:flex;justify-content:space-between;margin-bottom:2px;">' +
+    '<span style="font-size:10px;color:#e0e0e0;">' + p.className + '</span>' +
+    '<span style="font-size:10px;font-weight:500;color:' + valColor + ';">' + pct + '%</span></div>' +
+    '<div style="height:2px;border-radius:2px;background:rgba(255,255,255,0.12);">' +
+    '<div style="width:' + pct + '%;height:100%;background:' + barColor + ';border-radius:2px;"></div></div></div>';
+}).join('');
+document.getElementById('classOverlayBars').innerHTML = barsHtml;
+overlay.style.display = 'block';
 
       var occhiali   = false;
       var mascherina = false;
@@ -472,16 +511,29 @@ async function classificaConTM() {
       predictions.forEach(function(p) {
         if (p.probability > maxConf) maxConf = p.probability;
         var cls = p.className.toLowerCase();
-        if (cls === 'occhiali'   && p.probability > 0.6) occhiali   = true;
-        if (cls === 'mascherina' && p.probability > 0.6) mascherina = true;
-        if (cls === 'entrambi'   && p.probability > 0.6) { occhiali = true; mascherina = true; }
+        if (cls === 'occhiali'   && p.probability > 0.75) occhiali   = true;
+        if (cls === 'mascherina' && p.probability > 0.75) mascherina = true;
+        if (cls === 'entrambi'   && p.probability > 0.75) { occhiali = true; mascherina = true; }
       });
 
       var richiesti = DPI_RICHIESTI[currentActivity] || [];
-      if (richiesti.indexOf('occhiali')   !== -1) updateDPI('occhiali',   occhiali,   true);
-      if (richiesti.indexOf('mascherina') !== -1) updateDPI('mascherina', mascherina, true);
-      updateDPI('guanti', null, true);
-      updateDPI('camice', null, true);
+
+      ['occhiali', 'mascherina'].forEach(function(dpi) {
+      if (richiesti.indexOf(dpi) === -1) return;
+      var nuovoStato = dpi === 'occhiali' ? occhiali : mascherina;
+      if (nuovoStato === statoStabile[dpi]) {
+        contatoreStabile[dpi] = 0;
+      } else {
+        contatoreStabile[dpi]++;
+        if (contatoreStabile[dpi] >= SOGLIA_STABILITA) {
+          statoStabile[dpi] = nuovoStato;
+          contatoreStabile[dpi] = 0;
+          updateDPI(dpi, nuovoStato, true);
+    }
+  }
+});
+updateDPI('guanti', null, true);
+updateDPI('camice', null, true);
       updateConfidence(Math.round(maxConf * 100));
       analisiAvviata = true;
       checkCompliance();
@@ -734,6 +786,7 @@ function leggiRisposta(testo) {
 
 document.addEventListener('DOMContentLoaded', function() {
   updateClock();
+  document.getElementById('streamVal').style.color = '#ff3b30';
   setInterval(updateClock, 10000);
   fetch('/api/attivita')
     .then(function(r) { return r.json(); })
