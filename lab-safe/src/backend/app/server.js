@@ -1,4 +1,11 @@
-// CONFIGURAZIONE DOTENV: punta al file nella cartella config
+/**
+ * @file server.js
+ * @description Backend Node.js/Express. Gestisce sessioni, chiamate API e avvia il microservizio Python.
+ */
+
+/**
+ * Inizializzazione ambiente e dipendenze.
+ */
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../../../config/env.txt') });
 
@@ -8,7 +15,9 @@ const Database = require('better-sqlite3');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-// DATABASE: punta alla cartella lab-safe/database/labsafe.db
+/**
+ * Inizializzazione database SQLite.
+ */
 const dbPath = path.join(__dirname, '../../../database/labsafe.db');
 const db = new Database(dbPath);
 
@@ -49,7 +58,9 @@ if (count.n === 0) {
 
 app.use(express.json({ limit: '50mb' }));
 
-// ELABORAZIONE FRAME (Proxy verso Python Microservice)
+/**
+ * Endpoint: Proxy per l'invio frame al microservizio Python.
+ */
 app.post('/api/process-frame', async function(req, res) {
   try {
     const pythonRes = await fetch('http://127.0.0.1:5000', {
@@ -65,19 +76,21 @@ app.post('/api/process-frame', async function(req, res) {
   }
 });
 
-// FILE STATICI: punta alla cartella lab-safe/src/frontend
+/**
+ * Rotte per i file statici e modelli.
+ */
 app.use(express.static(path.join(__dirname, '../../frontend')));
 
 app.use('/models', express.static(path.join(__dirname, '../../../data/models/teachable_machine')));
 
-// DIALOGFLOW
+/**
+ * Endpoint: Elaborazione testuale/vocale tramite Dialogflow.
+ */
 app.post('/api/dialogflow', function(req, res) {
   var dialogflow = require('@google-cloud/dialogflow');
   var body      = req.body;
   var projectId = process.env.DIALOGFLOW_PROJECT_ID;
   var sessionId = body.sessionId || 'user-001';
-
-  // Configura esplicitamente le credenziali di Google se presenti
   var config = {};
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     config.keyFilename = path.join(__dirname, '../../../config/credentials.json');
@@ -121,7 +134,9 @@ app.post('/api/dialogflow', function(req, res) {
     });
 });
 
-// DPI (da Teachable Machine)
+/**
+ * Endpoint: Ricezione esito DPI da Teachable Machine.
+ */
 app.post('/api/dpi', function(req, res) {
   var body       = req.body;
   var occhiali   = body.occhiali   || false;
@@ -138,7 +153,9 @@ app.post('/api/dpi', function(req, res) {
   });
 });
 
-// SESSIONI
+/**
+ * Endpoint: Gestione e archiviazione sessioni operative.
+ */
 app.post('/api/sessioni', function(req, res) {
   var b    = req.body;
   var stmt = db.prepare(
@@ -190,7 +207,9 @@ app.get('/api/statistiche', function(req, res) {
   });
 });
 
-// HOMEPAGE: punta a lab-safe/src/frontend/index.html
+/**
+ * Rotta root: Serve la Single Page Application.
+ */
 app.get('/', function(req, res) {
   res.sendFile(path.join(__dirname, '../../frontend/index.html'));
 });

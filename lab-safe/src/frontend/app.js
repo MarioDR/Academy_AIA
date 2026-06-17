@@ -1,3 +1,8 @@
+/**
+ * @file app.js
+ * @description Logica frontend. Gestisce UI, integrazione Teachable Machine e Dialogflow.
+ */
+
 var DPI_RICHIESTI = {
   pesatura_reagenti:    ['mascherina'],
   lettura_pH:           ['occhiali'],
@@ -61,6 +66,9 @@ function switchTab(tab) {
   }
 }
 
+/**
+ * Avvia il feed della webcam locale.
+ */
 function startWebcam() {
   navigator.mediaDevices.getUserMedia({ video: true })
     .then(function(stream) {
@@ -97,6 +105,9 @@ function stopWebcam() {
   document.getElementById('streamVal').textContent = 'inattivo';
 }
 
+/**
+ * Gestisce il caricamento manuale di un'immagine.
+ */
 function handleUpload(event) {
   var file = event.target.files[0];
   if (!file) return;
@@ -107,8 +118,8 @@ function handleUpload(event) {
       addMessage('bot', 'Immagine caricata. Dimmi prima quale attività vuoi svolgere.');
       return;
     }
-    sessioneSalvata = false; // reset per nuova immagine
-    setDPIIdle();            // reset stato DPI
+    sessioneSalvata = false;
+    setDPIIdle();
     addMessage('bot', 'Immagine caricata. Avvio analisi DPI…');
     classificaConTM();
   };
@@ -119,7 +130,7 @@ function handleUpload(event) {
 
   preview.src = URL.createObjectURL(file);
   preview.style.display = 'block';
-  event.target.value = ''; // reset per permettere di ricaricare la stessa immagine
+  event.target.value = '';
 }
 
 function updateDPI(dpiKey, present, skipCheck) {
@@ -290,6 +301,9 @@ function sendQuickReply(text) {
   processUserMessage(text);
 }
 
+/**
+ * Invia messaggi utente al chatbot Dialogflow.
+ */
 function processUserMessage(text) {
   var dpiRilevati = Object.keys(dpiState).filter(function(k) { return dpiState[k] === true; });
   fetch('/api/dialogflow', {
@@ -385,6 +399,9 @@ async function caricaModelloTM() {
   }
 }
 
+/**
+ * Loop principale di inferenza: estrae frame, ottiene la ROI e la classifica tramite TM.
+ */
 async function classificaConTM() {
   if (!tmModel) return;
   if (!currentActivity) return;
@@ -393,7 +410,7 @@ async function classificaConTM() {
   var isVideo = false;
   if (streamActive) {
     var video = document.getElementById('videoFeed');
-    if (!video || video.readyState < 2) return; // video non ancora pronto
+    if (!video || video.readyState < 2) return;
     source = video;
     isVideo = true;
   } else {
@@ -403,7 +420,6 @@ async function classificaConTM() {
   }
 
   try {
-    // 1. Estrai il frame in Base64
     var canvas = document.createElement('canvas');
     if (isVideo) {
       canvas.width = source.videoWidth;
@@ -415,8 +431,6 @@ async function classificaConTM() {
     var ctx = canvas.getContext('2d');
     ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
     var base64Img = canvas.toDataURL('image/jpeg', 0.8);
-
-    // 2. Invia al backend per estrazione ROI
     showAnalyzing(true);
     var res = await fetch('/api/process-frame', {
       method: 'POST',
@@ -430,10 +444,8 @@ async function classificaConTM() {
       console.warn('[TM] Nessun volto rilevato da YOLOv8 o errore:', data.message);
       var oldOverlay = document.getElementById('roiOverlay');
       if (oldOverlay) oldOverlay.style.display = 'none';
-      return; // Salta l'inferenza se non ci sono volti
+      return;
     }
-
-    // Visualizza la ROI a schermo
     var roiOverlay = document.getElementById('roiOverlay');
     if (!roiOverlay) {
       roiOverlay = document.createElement('div');
@@ -441,8 +453,6 @@ async function classificaConTM() {
       roiOverlay.style.cssText = 'position:absolute; bottom:16px; right:16px; width:76px; height:76px; border:2px solid #34c759; border-radius:10px; overflow:hidden; z-index:10; box-shadow: 0 4px 12px rgba(0,0,0,0.3); background:#000;';
       roiOverlay.innerHTML = '<img id="roiImageDisplay" style="width:100%; height:100%; object-fit:cover;" /><div style="position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.7); color:white; font-size:9px; text-align:center; padding:3px 0; font-weight:600; letter-spacing:0.05em;">FACE ROI</div>';
     }
-    
-    // Assicurati che il contenitore sia relative e appendi l'overlay
     var parentArea = isVideo ? document.getElementById('webcamArea') : document.getElementById('uploadArea');
     if (parentArea) {
       parentArea.style.position = 'relative';
@@ -451,8 +461,6 @@ async function classificaConTM() {
     
     roiOverlay.style.display = 'block';
     document.getElementById('roiImageDisplay').src = data.face_rois[0];
-
-    // 3. Esegui l'inferenza TM sulla Face ROI
     var roiImg = new Image();
     roiImg.onload = async function() {
       var predictions = await tmModel.predict(roiImg);
@@ -494,7 +502,7 @@ function avviaLoopTM() {
     if (streamActive && currentActivity && tmModel) {
       classificaConTM();
     }
-  }, 2000); // ogni 2 secondi
+  }, 2000);
 }
 
 function fermaLoopTM() {
@@ -720,8 +728,6 @@ function leggiRisposta(testo) {
 document.addEventListener('DOMContentLoaded', function() {
   updateClock();
   setInterval(updateClock, 10000);
-
-  // Carica mappatura DPI dal database
   fetch('/api/attivita')
     .then(function(r) { return r.json(); })
     .then(function(rows) {
@@ -740,7 +746,7 @@ document.getElementById('speakerBtn').addEventListener('click', function() {
   var icon = document.getElementById('speakerIcon');
   icon.className = speechOutputEnabled ? 'ti ti-volume' : 'ti ti-volume-off';
   if (!speechOutputEnabled) {
-    window.speechSynthesis.cancel(); // ferma subito qualsiasi voce in corso
+    window.speechSynthesis.cancel();
   }
 });
 inizializzaVoce();
