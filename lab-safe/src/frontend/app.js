@@ -25,6 +25,7 @@ var RISCHIO_LABEL = {
   titolazione:          'Medio · titolazione',
 };
 
+var classificaInCorso = false;
 var tmModel = null;
 var tmModelURL = '/models/face/';
 var sessioneSalvata = false;
@@ -193,6 +194,7 @@ function setDPIIdle() {
    sessioneSalvata = false;
    ultimoEsitoCheck = null;
    analisiAvviata = false;
+   classificaInCorso = false;
    statoStabile = { occhiali: null, mascherina: null };
    contatoreStabile = { occhiali: 0, mascherina: 0 };
   ['occhiali','guanti','mascherina','camice'].forEach(function(k) {
@@ -419,17 +421,18 @@ async function caricaModelloTM() {
 async function classificaConTM() {
   if (!tmModel) return;
   if (!currentActivity) return;
-
+  if (classificaInCorso) return; 
+  classificaInCorso = true;     
   var source = null;
   var isVideo = false;
   if (streamActive) {
     var video = document.getElementById('videoFeed');
-    if (!video || video.readyState < 2) return;
+    if (!video || video.readyState < 2) { classificaInCorso = false; return; }
     source = video;
     isVideo = true;
   } else {
     var preview = document.getElementById('uploadPreview');
-    if (!preview || preview.style.display === 'none' || !preview.src) return;
+    if (!preview || preview.style.display === 'none' || !preview.src) { classificaInCorso = false; return; }
     source = preview;
   }
 
@@ -458,6 +461,7 @@ async function classificaConTM() {
       console.warn('[TM] Nessun volto rilevato da YOLOv8 o errore:', data.message);
       var oldOverlay = document.getElementById('roiOverlay');
       if (oldOverlay) oldOverlay.style.display = 'none';
+      classificaInCorso = false;
       return;
     }
     var roiOverlay = document.getElementById('roiOverlay');
@@ -537,11 +541,13 @@ updateDPI('camice', null, true);
       updateConfidence(Math.round(maxConf * 100));
       analisiAvviata = true;
       checkCompliance();
+      classificaInCorso = false;
     };
     roiImg.src = data.face_rois[0];
 
   } catch(e) {
     showAnalyzing(false);
+    classificaInCorso = false;
     console.error('[TM] Errore classificazione:', e);
   }
 }
