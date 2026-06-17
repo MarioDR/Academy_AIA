@@ -150,11 +150,13 @@ function updateDPI(dpiKey, present, skipCheck) {
 }
 
 var ultimoEsitoCheck = null;
+var analisiAvviata = false;
 
 function checkCompliance() {
   if (!currentActivity) return;
+  if (!analisiAvviata) return;
   var richiesti = DPI_RICHIESTI[currentActivity] || [];
-  var mancanti  = richiesti.filter(function(d) { return dpiState[d] === false; });
+  var mancanti = richiesti.filter(function(d) { return dpiState[d] !== true; });
   var badge     = document.getElementById('dpiBadge');
   var esitoAttuale = mancanti.length === 0 ? 'conforme' : mancanti.join(',');
 
@@ -179,6 +181,7 @@ function checkCompliance() {
 function setDPIIdle() {
    sessioneSalvata = false;
    ultimoEsitoCheck = null;
+   analisiAvviata = false;
   ['occhiali','guanti','mascherina','camice'].forEach(function(k) {
     dpiState[k] = null;
     var item = document.getElementById('dpi-' + k);
@@ -331,9 +334,13 @@ function processUserMessage(text) {
   .then(function(data) {
     var ATTIVITA_NON_DISPONIBILI = ['miscelazione_acidi', 'uso_fiamme', 'uso_solventi', 'titolazione'];
     if (data.attivita && ATTIVITA_NON_DISPONIBILI.indexOf(data.attivita) !== -1) {
+      analisiAvviata = false;
+      currentActivity = null;
+      updateRisk(null);
+      setDPIIdle();
       addMessage('alert', 'Questa attività richiede il rilevamento Full Body, non ancora disponibile in questa versione. Prova con: pesatura reagenti, lettura pH, preparazione tamponi o campionamento.');
       return;
-    }
+  }
     if (data.attivita && data.attivita !== currentActivity) {
       currentActivity = data.attivita;
       updateRisk(currentActivity);
@@ -378,26 +385,6 @@ function processUserMessage(text) {
   .catch(function() {
     addMessage('bot', 'Errore di connessione al server. Riprova.');
   });
-}
-
-function simulateDPIDetection(activityKey) {
-  showAnalyzing(true);
-  var richiesti = DPI_RICHIESTI[activityKey] || [];
-  var tutti     = ['occhiali', 'guanti', 'mascherina', 'camice'];
-  var mancante  = richiesti[Math.floor(Math.random() * richiesti.length)];
-  setTimeout(function() {
-    showAnalyzing(false);
-    tutti.forEach(function(d) {
-      updateDPI(d, richiesti.indexOf(d) !== -1 ? d !== mancante : false, true);
-    });
-    checkCompliance();
-    updateConfidence(65 + Math.random() * 20);
-    setTimeout(function() {
-      tutti.forEach(function(d) { updateDPI(d, richiesti.indexOf(d) !== -1, true); });
-      checkCompliance();
-      updateConfidence(88 + Math.random() * 10);
-    }, 3000);
-  }, 1500);
 }
 
 async function caricaModelloTM() {
@@ -496,6 +483,7 @@ async function classificaConTM() {
       updateDPI('guanti', null, true);
       updateDPI('camice', null, true);
       updateConfidence(Math.round(maxConf * 100));
+      analisiAvviata = true;
       checkCompliance();
     };
     roiImg.src = data.face_rois[0];
@@ -560,20 +548,27 @@ function caricaStorico() {
         return;
       }
       rows.forEach(function(row) {
-        var initials = row.operatore.split(' ').map(function(w) { return w[0]; }).join('').toUpperCase().slice(0, 2);
+        var initials = row.operatore.split(' ').filter(function(w) { return w.length > 0; }).map(function(w) { return w[0]; }).join('').toUpperCase();
         var isOk     = row.esito === 'conforme';
         var orario   = new Date(row.fine).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
         var attivita = (row.attivita || '').replace(/_/g, ' ');
         var mancanti = JSON.parse(row.dpi_mancanti || '[]');
-        var dettaglio = isOk ? attivita : attivita + (mancanti.length ? ' · mancava ' + mancanti.join(', ') : '');
+        var dettaglio = isOk ? attivita : attivita + (mancanti.length ? ' · DPI mancanti: ' + mancanti.join(', ') : '');
         var item = document.createElement('div');
         item.className = 'log-item';
         item.innerHTML =
-          '<div class="log-avatar">' + initials + '</div>' +
-          '<div><div class="log-name">' + row.operatore + '</div><div class="log-detail">' + dettaglio + '</div></div>' +
-          '<span class="log-badge ' + (isOk ? 'ok' : 'warn') + '">' + (isOk ? 'Conforme' : 'Violazione') + '</span>' +
-          '<span class="log-time">' + orario + '</span>';
+          item.innerHTML =
+            '<div class="log-avatar">' + initials + '</div>' +
+            '<div><div class="log-name">' + row.operatore + '</div><div class="log-detail">' + dettaglio + '</div></div>' +
+            '<span class="log-badge ' + (isOk ? 'ok' : 'warn') + '">' + (isOk ? 'Conforme' : 'Violazione') + '</span>' +
+            '<span class="log-time">' + orario + '</span>' +
+            '<button class="log-delete" data-id="' + row.id + '"><i class="ti ti-trash"></i></button>';
         list.appendChild(item);
+        item.querySelector('.log-delete').addEventListener('click', function() {
+        var id = this.getAttribute('data-id');
+        fetch('/api/sessioni/' + id, { method: 'DELETE' })
+        .then(function() { caricaStorico(); });
+        });
       });
     });
 

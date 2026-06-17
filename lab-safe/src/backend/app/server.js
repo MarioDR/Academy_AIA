@@ -174,8 +174,13 @@ app.post('/api/sessioni', function(req, res) {
 });
 
 app.get('/api/sessioni', function(req, res) {
-  var rows = db.prepare('SELECT * FROM sessioni ORDER BY id DESC LIMIT 50').all();
+  var rows = db.prepare('SELECT * FROM sessioni ORDER BY id DESC LIMIT 15').all();
   res.json(rows);
+});
+
+app.delete('/api/sessioni/:id', function(req, res) {
+  db.prepare('DELETE FROM sessioni WHERE id = ?').run(req.params.id);
+  res.json({ status: 'ok' });
 });
 
 app.get('/api/attivita', function(req, res) {

@@ -586,3 +586,12 @@ body.dark  { background: #000000; }
 .light .pw-pending .pulse-dot { background: #ff9500; }
 .dark  .pw-pending .pulse-dot { background: #ff9f0a; }
 .pw-pending .pulse-ring { animation: pa 2s ease-out infinite; background: rgba(255,149,0,0.2); }
+
+.log-delete {
+  background: none; border: none; cursor: pointer;
+  font-size: 14px; padding: 4px 6px; border-radius: 6px;
+  opacity: 0; transition: opacity 0.2s; flex-shrink: 0;
+}
+.light .log-delete { color: #ff3b30; }
+.dark  .log-delete { color: #ff453a; }
+.log-item:hover .log-delete { opacity: 1; }
