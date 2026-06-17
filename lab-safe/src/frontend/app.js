@@ -195,6 +195,17 @@ function setDPIIdle() {
 });
 }
 
+function setDPIPending(activityKey) {
+  var richiesti = DPI_RICHIESTI[activityKey] || [];
+  richiesti.forEach(function(k) {
+    var item = document.getElementById('dpi-' + k);
+    if (!item) return;
+    item.className = 'dpi-item pending';
+    item.querySelector('.pulse-wrap').className = 'pulse-wrap pw-pending';
+    item.querySelector('.dpi-status').textContent = '?';
+  });
+}
+
 function aggiornaDPIVisibility(activityKey) {
   var richiesti = DPI_RICHIESTI[activityKey] || [];
   var nonRilevabili = ['guanti', 'camice']; // Full Body — release futura
@@ -333,6 +344,7 @@ function processUserMessage(text) {
     } else if (document.getElementById('uploadPreview').style.display !== 'none') {
       setTimeout(function() { classificaConTM(); }, 1200);
     } else {
+      setDPIPending(currentActivity);
       addMessage('bot', 'Attività registrata. Avvia la webcam o carica un\'immagine per analizzare i DPI.');
     }
 }

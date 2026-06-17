@@ -578,3 +578,11 @@ body.dark  { background: #000000; }
 
 .light .dpi-item.dpi-inactive { opacity: 0.3; }
 .dark  .dpi-item.dpi-inactive { opacity: 0.3; }
+
+.light .dpi-item.pending { color: #ff9500; }
+.dark  .dpi-item.pending { color: #ff9f0a; }
+.light .dpi-item.pending .dpi-status { background: #fff4e0; color: #ff9500; }
+.dark  .dpi-item.pending .dpi-status { background: rgba(255,159,10,0.12); color: #ff9f0a; }
+.light .pw-pending .pulse-dot { background: #ff9500; }
+.dark  .pw-pending .pulse-dot { background: #ff9f0a; }
+.pw-pending .pulse-ring { animation: pa 2s ease-out infinite; background: rgba(255,149,0,0.2); }
