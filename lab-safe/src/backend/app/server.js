@@ -45,7 +45,23 @@ if (count.n === 0) {
   insert.run('manipolazione_campioni',   JSON.stringify(['occhiali', 'mascherina']), 'Basso');
 }
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+
+// ELABORAZIONE FRAME (Proxy verso Python Microservice)
+app.post('/api/process-frame', async function(req, res) {
+  try {
+    const pythonRes = await fetch('http://127.0.0.1:5000', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await pythonRes.json();
+    res.json(data);
+  } catch (err) {
+    console.error('Errore comunicazione con server Python:', err.message);
+    res.status(500).json({ status: 'error', message: 'Server Python non raggiungibile. Assicurati che detector.py sia in esecuzione in modalità server.' });
+  }
+});
 
 // FILE STATICI: punta alla cartella lab-safe/src/frontend
 app.use(express.static(path.join(__dirname, '../../frontend')));
@@ -176,6 +192,17 @@ app.get('/api/statistiche', function(req, res) {
 app.get('/', function(req, res) {
   res.sendFile(path.join(__dirname, '../../frontend/index.html'));
 });
+
+const { spawn } = require('child_process');
+const pythonProcess = spawn('python', [path.join(__dirname, '../vision/detector.py'), '--mode', 'server']);
+
+pythonProcess.stdout.on('data', (data) => console.log(`[YOLOv8]: ${data.toString().trim()}`));
+pythonProcess.stderr.on('data', (data) => console.error(`[YOLOv8 Error]: ${data.toString().trim()}`));
+pythonProcess.on('close', (code) => console.log(`[YOLOv8] Server terminato con codice ${code}`));
+
+process.on('exit', () => pythonProcess.kill());
+process.on('SIGINT', () => { pythonProcess.kill(); process.exit(); });
+process.on('SIGTERM', () => { pythonProcess.kill(); process.exit(); });
 
 app.listen(PORT, function() {
   console.log('\n🔬 Lab-Safe in esecuzione su http://localhost:' + PORT + '\n');

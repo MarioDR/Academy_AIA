@@ -114,18 +114,25 @@ function handleUpload(event) {
   var file = event.target.files[0];
   if (!file) return;
   var preview = document.getElementById('uploadPreview');
+  
+  preview.onload = function() {
+    if (!currentActivity) {
+      addMessage('bot', 'Immagine caricata. Dimmi prima quale attività vuoi svolgere.');
+      return;
+    }
+    sessioneSalvata = false; // reset per nuova immagine
+    setDPIIdle();            // reset stato DPI
+    addMessage('bot', 'Immagine caricata. Avvio analisi DPI…');
+    classificaConTM();
+  };
+
+  preview.onerror = function() {
+    addMessage('bot', 'Errore: Formato immagine non supportato dal browser. Prova con un JPG o PNG.');
+  };
+
   preview.src = URL.createObjectURL(file);
   preview.style.display = 'block';
-
-  if (!currentActivity) {
-    addMessage('bot', 'Immagine caricata. Dimmi prima quale attività vuoi svolgere.');
-    return;
-  }
-
-  sessioneSalvata = false; // reset per nuova immagine
-  setDPIIdle();            // reset stato DPI
-  addMessage('bot', 'Immagine caricata. Avvio analisi DPI…');
-  setTimeout(function() { classificaConTM(); }, 500);
+  event.target.value = ''; // reset per permettere di ricaricare la stessa immagine
 }
 
 function updateDPI(dpiKey, present, skipCheck) {
@@ -352,10 +359,12 @@ async function classificaConTM() {
   if (!currentActivity) return;
 
   var source = null;
+  var isVideo = false;
   if (streamActive) {
     var video = document.getElementById('videoFeed');
     if (!video || video.readyState < 2) return; // video non ancora pronto
     source = video;
+    isVideo = true;
   } else {
     var preview = document.getElementById('uploadPreview');
     if (!preview || preview.style.display === 'none' || !preview.src) return;
@@ -363,28 +372,84 @@ async function classificaConTM() {
   }
 
   try {
-    var predictions = await tmModel.predict(source);
-    console.log('[TM] Predictions:', predictions);
+    // 1. Estrai il frame in Base64
+    var canvas = document.createElement('canvas');
+    if (isVideo) {
+      canvas.width = source.videoWidth;
+      canvas.height = source.videoHeight;
+    } else {
+      canvas.width = source.naturalWidth;
+      canvas.height = source.naturalHeight;
+    }
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+    var base64Img = canvas.toDataURL('image/jpeg', 0.8);
 
-    var occhiali   = false;
-    var mascherina = false;
-    var maxConf    = 0;
-
-    predictions.forEach(function(p) {
-      if (p.probability > maxConf) maxConf = p.probability;
-      var cls = p.className.toLowerCase();
-      if (cls === 'occhiali'   && p.probability > 0.6) occhiali   = true;
-      if (cls === 'mascherina' && p.probability > 0.6) mascherina = true;
-      if (cls === 'entrambi'   && p.probability > 0.6) { occhiali = true; mascherina = true; }
+    // 2. Invia al backend per estrazione ROI
+    showAnalyzing(true);
+    var res = await fetch('/api/process-frame', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: base64Img })
     });
+    var data = await res.json();
+    showAnalyzing(false);
 
-    updateDPI('occhiali',   occhiali,   true);
-    updateDPI('mascherina', mascherina, true);
-    updateDPI('guanti',     false,      true);
-    updateDPI('camice',     false,      true);
-    updateConfidence(Math.round(maxConf * 100));
-    checkCompliance();
+    if (data.status !== 'ok' || !data.face_rois || data.face_rois.length === 0) {
+      console.warn('[TM] Nessun volto rilevato da YOLOv8 o errore:', data.message);
+      var oldOverlay = document.getElementById('roiOverlay');
+      if (oldOverlay) oldOverlay.style.display = 'none';
+      return; // Salta l'inferenza se non ci sono volti
+    }
+
+    // Visualizza la ROI a schermo
+    var roiOverlay = document.getElementById('roiOverlay');
+    if (!roiOverlay) {
+      roiOverlay = document.createElement('div');
+      roiOverlay.id = 'roiOverlay';
+      roiOverlay.style.cssText = 'position:absolute; bottom:16px; right:16px; width:76px; height:76px; border:2px solid #34c759; border-radius:10px; overflow:hidden; z-index:10; box-shadow: 0 4px 12px rgba(0,0,0,0.3); background:#000;';
+      roiOverlay.innerHTML = '<img id="roiImageDisplay" style="width:100%; height:100%; object-fit:cover;" /><div style="position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.7); color:white; font-size:9px; text-align:center; padding:3px 0; font-weight:600; letter-spacing:0.05em;">FACE ROI</div>';
+    }
+    
+    // Assicurati che il contenitore sia relative e appendi l'overlay
+    var parentArea = isVideo ? document.getElementById('webcamArea') : document.getElementById('uploadArea');
+    if (parentArea) {
+      parentArea.style.position = 'relative';
+      if (roiOverlay.parentNode !== parentArea) parentArea.appendChild(roiOverlay);
+    }
+    
+    roiOverlay.style.display = 'block';
+    document.getElementById('roiImageDisplay').src = data.face_rois[0];
+
+    // 3. Esegui l'inferenza TM sulla Face ROI
+    var roiImg = new Image();
+    roiImg.onload = async function() {
+      var predictions = await tmModel.predict(roiImg);
+      console.log('[TM] Predictions on ROI:', predictions);
+
+      var occhiali   = false;
+      var mascherina = false;
+      var maxConf    = 0;
+
+      predictions.forEach(function(p) {
+        if (p.probability > maxConf) maxConf = p.probability;
+        var cls = p.className.toLowerCase();
+        if (cls === 'occhiali'   && p.probability > 0.6) occhiali   = true;
+        if (cls === 'mascherina' && p.probability > 0.6) mascherina = true;
+        if (cls === 'entrambi'   && p.probability > 0.6) { occhiali = true; mascherina = true; }
+      });
+
+      updateDPI('occhiali',   occhiali,   true);
+      updateDPI('mascherina', mascherina, true);
+      updateDPI('guanti',     false,      true);
+      updateDPI('camice',     false,      true);
+      updateConfidence(Math.round(maxConf * 100));
+      checkCompliance();
+    };
+    roiImg.src = data.face_rois[0];
+
   } catch(e) {
+    showAnalyzing(false);
     console.error('[TM] Errore classificazione:', e);
   }
 }

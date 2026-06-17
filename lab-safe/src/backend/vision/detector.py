@@ -104,7 +104,7 @@ def process_frame(frame, model):
 
 def main():
     parser = argparse.ArgumentParser(description="Lab-Safe OpenCV Layer")
-    parser.add_argument("--mode", type=str, required=True, choices=["webcam", "image", "folder"], help="Modalità di esecuzione: 'webcam', 'image' o 'folder'")
+    parser.add_argument("--mode", type=str, required=True, choices=["webcam", "image", "folder", "server"], help="Modalità di esecuzione: 'webcam', 'image', 'folder' o 'server'")
     parser.add_argument("--source", type=str, default="", help="Percorso dell'immagine o della cartella (richiesto se mode='image' o 'folder')")
     parser.add_argument("--output", type=str, default="", help="Percorso personalizzato di output dove salvare i ritagli (opzionale)")
     args = parser.parse_args()
@@ -232,6 +232,66 @@ def main():
                     cv2.imwrite(save_path, b_roi)
                     
         print("[INFO] Elaborazione cartella completata ed esportata nel dataset.")
+
+    elif args.mode == "server":
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+        import json
+        import base64
+        
+        class APIHandler(BaseHTTPRequestHandler):
+            def _set_headers(self):
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                
+            def do_POST(self):
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                
+                try:
+                    data = json.loads(post_data.decode('utf-8'))
+                    img_data = data.get('image', '')
+                    if img_data.startswith('data:image'):
+                        img_data = img_data.split(',')[1]
+                    
+                    img_bytes = base64.b64decode(img_data)
+                    np_arr = np.frombuffer(img_bytes, np.uint8)
+                    frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                    
+                    if frame is None:
+                        raise ValueError("Immagine non decodificabile")
+                        
+                    _, face_rois, body_rois = process_frame(frame, model)
+                    
+                    def rois_to_base64(rois):
+                        b64_list = []
+                        for roi in rois:
+                            _, buffer = cv2.imencode('.jpg', roi)
+                            b64_str = base64.b64encode(buffer).decode('utf-8')
+                            b64_list.append(f"data:image/jpeg;base64,{b64_str}")
+                        return b64_list
+                        
+                    response = {
+                        "status": "ok",
+                        "face_rois": rois_to_base64(face_rois),
+                        "body_rois": rois_to_base64(body_rois)
+                    }
+                except Exception as e:
+                    print(f"[ERRORE] Elaborazione frame fallita: {e}")
+                    response = {"status": "error", "message": str(e)}
+                    
+                self._set_headers()
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+
+        server_address = ('127.0.0.1', 5000)
+        httpd = HTTPServer(server_address, APIHandler)
+        print("[INFO] Server Python (YOLOv8 Pose) in ascolto su http://127.0.0.1:5000 ...")
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        httpd.server_close()
+        print("[INFO] Server Python fermato.")
 
 if __name__ == "__main__":
     main()
