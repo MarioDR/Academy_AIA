@@ -126,9 +126,15 @@ function updateDPI(dpiKey, present, skipCheck) {
   dpiState[dpiKey] = present;
   var item = document.getElementById('dpi-' + dpiKey);
   if (!item) return;
-  item.className = 'dpi-item ' + (present ? 'ok' : 'warn');
-  item.querySelector('.pulse-wrap').className = 'pulse-wrap ' + (present ? 'pw-ok' : 'pw-warn');
-  item.querySelector('.dpi-status').textContent = present ? 'OK' : '!';
+  if (present === null) {
+    item.className = 'dpi-item idle';
+    item.querySelector('.pulse-wrap').className = 'pulse-wrap pw-idle';
+    item.querySelector('.dpi-status').textContent = '—';
+  } else {
+    item.className = 'dpi-item ' + (present ? 'ok' : 'warn');
+    item.querySelector('.pulse-wrap').className = 'pulse-wrap ' + (present ? 'pw-ok' : 'pw-warn');
+    item.querySelector('.dpi-status').textContent = present ? 'OK' : '!';
+  }
   if (!skipCheck) checkCompliance();
 }
 
@@ -180,11 +186,14 @@ function setDPIIdle() {
 
 function aggiornaDPIVisibility(activityKey) {
   var richiesti = DPI_RICHIESTI[activityKey] || [];
+  var nonRilevabili = ['guanti', 'camice']; // Full Body — release futura
   ['occhiali', 'guanti', 'mascherina', 'camice'].forEach(function(k) {
     var item = document.getElementById('dpi-' + k);
     if (!item) return;
-    if (richiesti.indexOf(k) === -1) {
+    if (nonRilevabili.indexOf(k) !== -1) {
       item.classList.add('dpi-inactive');
+    } else if (richiesti.indexOf(k) === -1) {
+      item.classList.remove('dpi-inactive');
     } else {
       item.classList.remove('dpi-inactive');
     }
@@ -303,8 +312,8 @@ function processUserMessage(text) {
     if (data.attivita && data.attivita !== currentActivity) {
       currentActivity = data.attivita;
       updateRisk(currentActivity);
-      aggiornaDPIVisibility(currentActivity);
       setDPIIdle();
+      aggiornaDPIVisibility(currentActivity);
     if (streamActive) {
       setTimeout(function() { classificaConTM(); }, 1200);
     } else if (document.getElementById('uploadPreview').style.display !== 'none') {
@@ -461,10 +470,11 @@ async function classificaConTM() {
         if (cls === 'entrambi'   && p.probability > 0.6) { occhiali = true; mascherina = true; }
       });
 
-      updateDPI('occhiali',   occhiali,   true);
-      updateDPI('mascherina', mascherina, true);
-      updateDPI('guanti',     null,      true);
-      updateDPI('camice',     null,      true);
+      var richiesti = DPI_RICHIESTI[currentActivity] || [];
+      if (richiesti.indexOf('occhiali')   !== -1) updateDPI('occhiali',   occhiali,   true);
+      if (richiesti.indexOf('mascherina') !== -1) updateDPI('mascherina', mascherina, true);
+      updateDPI('guanti', null, true);
+      updateDPI('camice', null, true);
       updateConfidence(Math.round(maxConf * 100));
       checkCompliance();
     };
