@@ -37,12 +37,14 @@ db.exec(`
 var count = db.prepare('SELECT COUNT(*) as n FROM attivita_dpi').get();
 if (count.n === 0) {
   var insert = db.prepare('INSERT INTO attivita_dpi (attivita, dpi, rischio) VALUES (?, ?, ?)');
-  insert.run('miscelazione_acidi', JSON.stringify(['occhiali','guanti','camice','mascherina']), 'Alto');
-  insert.run('uso_fiamme',         JSON.stringify(['occhiali','guanti','camice']),              'Alto');
-  insert.run('uso_solventi',       JSON.stringify(['occhiali','guanti','mascherina']),          'Medio');
-  insert.run('titolazione',        JSON.stringify(['occhiali','guanti']),                       'Medio');
-  insert.run('osservazione_microscopia', JSON.stringify(['occhiali']), 'Basso');
-  insert.run('manipolazione_campioni',   JSON.stringify(['occhiali', 'mascherina']), 'Basso');
+  insert.run('pesatura_reagenti',        JSON.stringify(['mascherina']),                         'Basso');
+  insert.run('lettura_pH',               JSON.stringify(['occhiali']),                           'Basso');
+  insert.run('preparazione_tamponi',     JSON.stringify(['occhiali', 'mascherina']),             'Medio');
+  insert.run('campionamento',            JSON.stringify(['occhiali', 'mascherina']),             'Medio');
+  insert.run('miscelazione_acidi',       JSON.stringify(['occhiali','guanti','camice','mascherina']), 'Alto');
+  insert.run('uso_fiamme',               JSON.stringify(['occhiali','guanti','camice']),         'Alto');
+  insert.run('uso_solventi',             JSON.stringify(['occhiali','guanti','mascherina']),     'Medio');
+  insert.run('titolazione',              JSON.stringify(['occhiali','guanti']),                  'Medio');
 }
 
 app.use(express.json({ limit: '50mb' }));

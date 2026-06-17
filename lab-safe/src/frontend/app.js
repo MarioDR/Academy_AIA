@@ -1,36 +1,23 @@
 var DPI_RICHIESTI = {
-  miscelazione_acidi: ['occhiali', 'guanti', 'camice', 'mascherina'],
-  uso_fiamme:         ['occhiali', 'guanti', 'camice'],
-  uso_solventi:       ['occhiali', 'guanti', 'mascherina'],
-  titolazione:        ['occhiali', 'guanti'],
-  osservazione_microscopia: ['occhiali'],
-  manipolazione_campioni:   ['occhiali', 'mascherina'],
+  pesatura_reagenti:    ['mascherina'],
+  lettura_pH:           ['occhiali'],
+  preparazione_tamponi: ['occhiali', 'mascherina'],
+  campionamento:        ['occhiali', 'mascherina'],
+  miscelazione_acidi:   ['occhiali', 'guanti', 'camice', 'mascherina'],
+  uso_fiamme:           ['occhiali', 'guanti', 'camice'],
+  uso_solventi:         ['occhiali', 'guanti', 'mascherina'],
+  titolazione:          ['occhiali', 'guanti'],
 };
 
 var RISCHIO_LABEL = {
-  miscelazione_acidi: 'Alto · miscelazione acidi',
-  uso_fiamme:         'Alto · uso fiamme libere',
-  uso_solventi:       'Medio · uso solventi',
-  titolazione:        'Medio · titolazione',
-  osservazione_microscopia: 'Basso · osservazione microscopia',
-  manipolazione_campioni:   'Basso · manipolazione campioni',
-};
-
-var ATTIVITA_ALIAS = {
-  'miscelazione acidi':  'miscelazione_acidi',
-  'acidi':               'miscelazione_acidi',
-  'fiamme':              'uso_fiamme',
-  'fiamma':              'uso_fiamme',
-  'bunsen':              'uso_fiamme',
-  'solventi':            'uso_solventi',
-  'solvente':            'uso_solventi',
-  'titolazione':         'titolazione',
-  'titolo':              'titolazione',
-  'microscopia':         'osservazione_microscopia',
-  'microscopio':         'osservazione_microscopia',
-  'campioni':            'manipolazione_campioni',
-  'manipolazione':       'manipolazione_campioni',
-  
+  pesatura_reagenti:    'Basso · pesatura reagenti',
+  lettura_pH:           'Basso · lettura pH',
+  preparazione_tamponi: 'Medio · preparazione tamponi',
+  campionamento:        'Medio · campionamento',
+  miscelazione_acidi:   'Alto · miscelazione acidi',
+  uso_fiamme:           'Alto · uso fiamme libere',
+  uso_solventi:         'Medio · uso solventi',
+  titolazione:          'Medio · titolazione',
 };
 
 var tmModel = null;
@@ -154,14 +141,15 @@ function checkCompliance() {
   var badge     = document.getElementById('dpiBadge');
   var esitoAttuale = mancanti.length === 0 ? 'conforme' : mancanti.join(',');
 
-  if (esitoAttuale === ultimoEsitoCheck) return; // nessun cambiamento, non fare nulla
+  if (esitoAttuale === ultimoEsitoCheck) return;
   ultimoEsitoCheck = esitoAttuale;
 
   if (mancanti.length === 0) {
     badge.textContent = 'Tutti OK';
     badge.className   = 'panel-badge ok';
     addMessage('success', '✓ DPI verificati. Puoi procedere in sicurezza.');
-    if (!sessioneSalvata) { salvaSessione('conforme'); sessioneSalvata = true; }
+    salvaSessione('conforme');
+    sessioneSalvata = true;
   } else {
     badge.textContent = mancanti.length + (mancanti.length > 1 ? ' mancanti' : ' mancante');
     badge.className   = 'panel-badge warn';
@@ -184,6 +172,23 @@ function setDPIIdle() {
   });
   document.getElementById('dpiBadge').textContent = 'in attesa';
   document.getElementById('dpiBadge').className   = 'panel-badge';
+  ['occhiali','guanti','mascherina','camice'].forEach(function(k) {
+  var item = document.getElementById('dpi-' + k);
+  if (item) item.classList.remove('dpi-inactive');
+});
+}
+
+function aggiornaDPIVisibility(activityKey) {
+  var richiesti = DPI_RICHIESTI[activityKey] || [];
+  ['occhiali', 'guanti', 'mascherina', 'camice'].forEach(function(k) {
+    var item = document.getElementById('dpi-' + k);
+    if (!item) return;
+    if (richiesti.indexOf(k) === -1) {
+      item.classList.add('dpi-inactive');
+    } else {
+      item.classList.remove('dpi-inactive');
+    }
+  });
 }
 
 function updateConfidence(value) {
@@ -227,8 +232,9 @@ function updateRisk(activityKey) {
 
 function salvaSessione(esito) {
   if (!currentActivity) return;
-  var dpiMancanti   = Object.keys(dpiState).filter(function(k) { return dpiState[k] === false; });
-  var dpiVerificati = Object.keys(dpiState).filter(function(k) { return dpiState[k] === true; });
+  var richiesti     = DPI_RICHIESTI[currentActivity] || [];
+  var dpiMancanti   = richiesti.filter(function(k) { return dpiState[k] === false; });
+  var dpiVerificati = richiesti.filter(function(k) { return dpiState[k] === true; });
   fetch('/api/sessioni', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -289,9 +295,15 @@ function processUserMessage(text) {
   })
   .then(function(res) { return res.json(); })
   .then(function(data) {
+    var ATTIVITA_NON_DISPONIBILI = ['miscelazione_acidi', 'uso_fiamme', 'uso_solventi', 'titolazione'];
+    if (data.attivita && ATTIVITA_NON_DISPONIBILI.indexOf(data.attivita) !== -1) {
+      addMessage('alert', 'Questa attività richiede il rilevamento Full Body, non ancora disponibile in questa versione. Prova con: pesatura reagenti, lettura pH, preparazione tamponi o campionamento.');
+      return;
+    }
     if (data.attivita && data.attivita !== currentActivity) {
       currentActivity = data.attivita;
       updateRisk(currentActivity);
+      aggiornaDPIVisibility(currentActivity);
       setDPIIdle();
     if (streamActive) {
       setTimeout(function() { classificaConTM(); }, 1200);
@@ -451,8 +463,8 @@ async function classificaConTM() {
 
       updateDPI('occhiali',   occhiali,   true);
       updateDPI('mascherina', mascherina, true);
-      updateDPI('guanti',     false,      true);
-      updateDPI('camice',     false,      true);
+      updateDPI('guanti',     null,      true);
+      updateDPI('camice',     null,      true);
       updateConfidence(Math.round(maxConf * 100));
       checkCompliance();
     };
@@ -546,12 +558,14 @@ function caricaStorico() {
 }
 
 function disegnaLinea(dati) {
-  var svg    = document.getElementById('lineChart');
-  var giorni = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
-  var oggi   = new Date();
+  var svg  = document.getElementById('lineChart');
+  var oggi = new Date();
+  var nomiGiorni = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+  var giorni = [];
   var punti  = [];
   for (var i = 6; i >= 0; i--) {
     var d   = new Date(oggi); d.setDate(oggi.getDate() - i);
+    giorni.push(nomiGiorni[d.getDay()]);
     var key = d.toISOString().slice(0, 10);
     var row = dati.find(function(r) { return r.giorno === key; });
     punti.push(row ? row.n : 0);
@@ -561,15 +575,11 @@ function disegnaLinea(dati) {
   var coords = punti.map(function(v, i) {
     return { x: Math.round(i * (W / 6)), y: Math.round(H - pad - (v / max) * (H - pad * 2)) };
   });
-
   var isDark  = document.body.classList.contains('dark');
   var lineCol = isDark ? '#0a84ff' : '#007aff';
   var textCol = isDark ? '#636366' : '#8e8e93';
-  var areaCol = isDark ? 'rgba(10,132,255,0.1)' : 'rgba(0,122,255,0.08)';
-
   var pathD   = coords.map(function(c, i) { return (i === 0 ? 'M' : 'L') + c.x + ',' + c.y; }).join(' ');
   var areaD   = pathD + ' L' + coords[coords.length-1].x + ',70 L0,70 Z';
-
   svg.innerHTML =
     '<defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="' + lineCol + '" stop-opacity="0.15"/><stop offset="100%" stop-color="' + lineCol + '" stop-opacity="0"/></linearGradient></defs>' +
     '<path d="' + areaD + '" fill="url(#lg)"/>' +

@@ -172,12 +172,14 @@
           </div>
           <div class="chat-messages" id="chatMessages"></div>
           <div class="quick-replies" id="quickReplies">
-            <button class="qr-btn" onclick="sendQuickReply('miscelazione acidi')">Miscelazione acidi</button>
-            <button class="qr-btn" onclick="sendQuickReply('uso fiamme')">Uso fiamme</button>
-            <button class="qr-btn" onclick="sendQuickReply('uso solventi')">Uso solventi</button>
-            <button class="qr-btn" onclick="sendQuickReply('titolazione')">Titolazione</button>
-            <button class="qr-btn" onclick="sendQuickReply('osservazione microscopia')">Microscopia</button>
-            <button class="qr-btn" onclick="sendQuickReply('manipolazione campioni')">Manipolazione campioni</button>
+            <button class="qr-btn" onclick="sendQuickReply('pesatura reagenti')">Pesatura reagenti</button>
+            <button class="qr-btn" onclick="sendQuickReply('lettura pH')">Lettura pH</button>
+            <button class="qr-btn" onclick="sendQuickReply('preparazione tamponi')">Preparazione tamponi</button>
+            <button class="qr-btn" onclick="sendQuickReply('campionamento')">Campionamento</button>
+            <button class="qr-btn qr-disabled" disabled title="Richiede rilevamento Full Body">Miscelazione acidi</button>
+            <button class="qr-btn qr-disabled" disabled title="Richiede rilevamento Full Body">Uso fiamme</button>
+            <button class="qr-btn qr-disabled" disabled title="Richiede rilevamento Full Body">Uso solventi</button>
+            <button class="qr-btn qr-disabled" disabled title="Richiede rilevamento Full Body">Titolazione</button>
           </div>
           <div class="chat-input-row">
             <input class="chat-input" id="chatInput" type="text" placeholder="Scrivi un messaggio…" />

@@ -555,3 +555,26 @@ body.dark  { background: #000000; }
   0%,100% { transform: scale(1); }
   50%      { transform: scale(1.12); }
 }
+
+.qr-btn.qr-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  border-color: #8e8e93;
+  color: #8e8e93;
+  background: transparent;
+}
+.qr-btn.qr-disabled:hover {
+  background: transparent;
+  color: #8e8e93;
+}
+.dark .qr-btn.qr-disabled {
+  border-color: #48484a;
+  color: #48484a;
+}
+.dark .qr-btn.qr-disabled:hover {
+  background: transparent;
+  color: #48484a;
+}
+
+.light .dpi-item.dpi-inactive { opacity: 0.3; }
+.dark  .dpi-item.dpi-inactive { opacity: 0.3; }
