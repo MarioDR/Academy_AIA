@@ -1,9 +1,7 @@
 # Lab-Safe: AI-Powered Laboratory Safety Assistant
 
-![Lab-Safe Banner](https://via.placeholder.com/1200x300.png?text=Lab-Safe+Assistant)
-
 ## 📖 Context
-**Lab-Safe** was developed as a thesis project following an Academic Internship (Tirocinio Accademico) at the **AI Applications Academy**, hosted at the **Università degli Studi di Salerno (UNISA)**, during the academic year **2025/26**. The goal of the project is to enhance safety in chemical and biological laboratories through real-time computer vision and conversational AI.
+**Lab-Safe** was developed as a thesis project following an Academic Internship at the **AI Applications Academy**, hosted at the **Università degli Studi di Salerno (UNISA)**, during the academic year **2025/26**. The goal of the project is to enhance safety in chemical and biological laboratories through real-time computer vision and conversational AI.
 
 ## 🚀 Features
 - **Real-Time PPE Detection:** Automatically verifies if the operator is wearing the required Personal Protective Equipment (PPE) such as safety glasses, masks, gloves, and lab coats.
@@ -137,5 +135,3 @@ The application will be accessible at: `http://localhost:3000`
 
 **Institution:** Università degli Studi di Salerno (UNISA)
 **Program:** Academic Internship (Tirocinio Accademico) at AI Applications Academy
-
-*Special thanks to the mentors and professors of the AI Academy for their guidance throughout the development of this thesis project.*
