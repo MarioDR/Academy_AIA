@@ -39,6 +39,15 @@ Webcam / Immagine → OpenCV (estrazione ROI) → Teachable Machine (classificaz
 
 ### Attività supportate
 
+#### Release 1.0 (Face Model)
+| Attività | DPI richiesti | Rischio |
+|---|---|---|
+| Pesatura reagenti | Mascherina | Basso |
+| Lettura pH | Occhiali | Basso |
+| Preparazione tamponi | Occhiali, Mascherina | Medio |
+| Campionamento | Occhiali, Mascherina | Medio |
+
+#### Release futura (Full Body Model)
 | Attività | DPI richiesti | Rischio |
 |---|---|---|
 | Miscelazione acidi | Occhiali, Guanti, Camice, Mascherina | Alto |
@@ -204,7 +213,7 @@ Gli intent configurati sono:
 
 ## Note per sviluppi futuri
 
-- Il modello Full Body (camice e guanti) è già supportato dall'architettura — basterà alimentare `updateDPI('camice', ...)` e `updateDPI('guanti', ...)` con il secondo modello TM
+- Il modello Full Body (camice e guanti) è già supportato dall'architettura — basterà popolare `updateDPI('camice', ...)` e `updateDPI('guanti', ...)` con il secondo modello TM
 
 ---
 
