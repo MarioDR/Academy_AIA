@@ -380,7 +380,7 @@ function processUserMessage(text) {
     tipo = 'alert';
   }
   if (data.intent === 'Default Welcome Intent') {
-    testo = 'Ciao ' + operatoreCorrente + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?';
+    testo = 'Salve ' + operatoreCorrente + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?';
   }
   if (data.intent !== 'Inizio_Attivita') {
     addMessage(tipo, testo);
@@ -523,19 +523,22 @@ overlay.style.display = 'block';
       var richiesti = DPI_RICHIESTI[currentActivity] || [];
 
       ['occhiali', 'mascherina'].forEach(function(dpi) {
-      if (richiesti.indexOf(dpi) === -1) return;
-      var nuovoStato = dpi === 'occhiali' ? occhiali : mascherina;
-      if (nuovoStato === statoStabile[dpi]) {
-        contatoreStabile[dpi] = 0;
-      } else {
-        contatoreStabile[dpi]++;
-        if (contatoreStabile[dpi] >= SOGLIA_STABILITA) {
-          statoStabile[dpi] = nuovoStato;
+        if (richiesti.indexOf(dpi) === -1) return;
+        var nuovoStato = dpi === 'occhiali' ? occhiali : mascherina;
+        
+        var sogliaAttuale = isVideo ? SOGLIA_STABILITA : 1;
+
+        if (nuovoStato === statoStabile[dpi]) {
           contatoreStabile[dpi] = 0;
-          updateDPI(dpi, nuovoStato, true);
-    }
-  }
-});
+        } else {
+          contatoreStabile[dpi]++;
+          if (contatoreStabile[dpi] >= sogliaAttuale) {
+            statoStabile[dpi] = nuovoStato;
+            contatoreStabile[dpi] = 0;
+            updateDPI(dpi, nuovoStato, true);
+          }
+        }
+      });
 updateDPI('guanti', null, true);
 updateDPI('camice', null, true);
       updateConfidence(Math.round(maxConf * 100));
@@ -853,7 +856,7 @@ document.getElementById('tabStatistiche').addEventListener('click', function() {
     }
     operatoreCorrente = nome;
     document.getElementById('welcomeScreen').classList.add('hidden');
-    addMessage('bot', 'Ciao ' + nome + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?');
+    addMessage('bot', 'Salve ' + nome + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?');
   });
   caricaModelloTM();
 });
