@@ -1,47 +1,43 @@
+/**
+ * @file app.js
+ * @description Logica frontend. Gestisce UI, integrazione Teachable Machine e Dialogflow.
+ */
+
 var DPI_RICHIESTI = {
-  miscelazione_acidi: ['occhiali', 'guanti', 'camice', 'mascherina'],
-  uso_fiamme:         ['occhiali', 'guanti', 'camice'],
-  uso_solventi:       ['occhiali', 'guanti', 'mascherina'],
-  titolazione:        ['occhiali', 'guanti'],
-  osservazione_microscopia: ['occhiali'],
-  manipolazione_campioni:   ['occhiali', 'mascherina'],
+  pesatura_reagenti:    ['mascherina'],
+  lettura_pH:           ['occhiali'],
+  preparazione_tamponi: ['occhiali', 'mascherina'],
+  campionamento:        ['occhiali', 'mascherina'],
+  miscelazione_acidi:   ['occhiali', 'guanti', 'camice', 'mascherina'],
+  uso_fiamme:           ['occhiali', 'guanti', 'camice'],
+  uso_solventi:         ['occhiali', 'guanti', 'mascherina'],
+  titolazione:          ['occhiali', 'guanti'],
 };
 
 var RISCHIO_LABEL = {
-  miscelazione_acidi: 'Alto · miscelazione acidi',
-  uso_fiamme:         'Alto · uso fiamme libere',
-  uso_solventi:       'Medio · uso solventi',
-  titolazione:        'Medio · titolazione',
-  osservazione_microscopia: 'Basso · osservazione microscopia',
-  manipolazione_campioni:   'Basso · manipolazione campioni',
+  pesatura_reagenti:    'Basso · pesatura reagenti',
+  lettura_pH:           'Basso · lettura pH',
+  preparazione_tamponi: 'Medio · preparazione tamponi',
+  campionamento:        'Medio · campionamento',
+  miscelazione_acidi:   'Alto · miscelazione acidi',
+  uso_fiamme:           'Alto · uso fiamme libere',
+  uso_solventi:         'Medio · uso solventi',
+  titolazione:          'Medio · titolazione',
 };
 
-var ATTIVITA_ALIAS = {
-  'miscelazione acidi':  'miscelazione_acidi',
-  'acidi':               'miscelazione_acidi',
-  'fiamme':              'uso_fiamme',
-  'fiamma':              'uso_fiamme',
-  'bunsen':              'uso_fiamme',
-  'solventi':            'uso_solventi',
-  'solvente':            'uso_solventi',
-  'titolazione':         'titolazione',
-  'titolo':              'titolazione',
-  'microscopia':         'osservazione_microscopia',
-  'microscopio':         'osservazione_microscopia',
-  'campioni':            'manipolazione_campioni',
-  'manipolazione':       'manipolazione_campioni',
-  
-};
-
+var classificaInCorso = false;
 var tmModel = null;
 var tmModelURL = '/models/face/';
 var sessioneSalvata = false;
-var speechOutputEnabled = false;
+var speechOutputEnabled = true;
 var operatoreCorrente = 'Operatore';
 var currentTheme    = 'light';
 var streamActive    = false;
 var currentActivity = null;
 var dpiState        = { occhiali: null, guanti: null, mascherina: null, camice: null };
+var statoStabile = { occhiali: null, mascherina: null };
+var contatoreStabile = { occhiali: 0, mascherina: 0 };
+var SOGLIA_STABILITA = 3;
 
 function updateClock() {
   var now = new Date();
@@ -71,9 +67,16 @@ function switchTab(tab) {
     document.getElementById('tabWebcam').classList.remove('active');
     document.getElementById('streamBadge').textContent = 'Upload';
     stopWebcam();
+    var roiOverlay = document.getElementById('roiOverlay');
+    if (roiOverlay) roiOverlay.style.display = 'none';
+    var classOverlay = document.getElementById('classOverlay');
+    if (classOverlay) classOverlay.style.display = 'none';
   }
 }
 
+/**
+ * Avvia il feed della webcam locale.
+ */
 function startWebcam() {
   navigator.mediaDevices.getUserMedia({ video: true })
     .then(function(stream) {
@@ -82,9 +85,11 @@ function startWebcam() {
       video.style.display = 'block';
       document.getElementById('webcamPlaceholder').style.display = 'none';
       streamActive = true;
+      document.getElementById('livePip').style.visibility = 'visible';
       avviaLoopTM();
       document.getElementById('streamBar').style.width = '90%';
       document.getElementById('streamVal').textContent = 'attivo';
+      document.getElementById('streamVal').style.color = '#34c759';
       if (currentActivity) {
         setTimeout(function() { classificaConTM(); }, 1200);
       } else {
@@ -105,11 +110,16 @@ function stopWebcam() {
   video.style.display = 'none';
   document.getElementById('webcamPlaceholder').style.display = 'flex';
   streamActive = false;
+  document.getElementById('livePip').style.visibility = 'hidden';
   fermaLoopTM();
   document.getElementById('streamBar').style.width = '0%';
   document.getElementById('streamVal').textContent = 'inattivo';
+  document.getElementById('streamVal').style.color = '#ff3b30';
 }
 
+/**
+ * Gestisce il caricamento manuale di un'immagine.
+ */
 function handleUpload(event) {
   var file = event.target.files[0];
   if (!file) return;
@@ -120,8 +130,8 @@ function handleUpload(event) {
       addMessage('bot', 'Immagine caricata. Dimmi prima quale attività vuoi svolgere.');
       return;
     }
-    sessioneSalvata = false; // reset per nuova immagine
-    setDPIIdle();            // reset stato DPI
+    sessioneSalvata = false;
+    setDPIIdle();
     addMessage('bot', 'Immagine caricata. Avvio analisi DPI…');
     classificaConTM();
   };
@@ -132,46 +142,61 @@ function handleUpload(event) {
 
   preview.src = URL.createObjectURL(file);
   preview.style.display = 'block';
-  event.target.value = ''; // reset per permettere di ricaricare la stessa immagine
+  event.target.value = '';
 }
 
 function updateDPI(dpiKey, present, skipCheck) {
   dpiState[dpiKey] = present;
   var item = document.getElementById('dpi-' + dpiKey);
   if (!item) return;
-  item.className = 'dpi-item ' + (present ? 'ok' : 'warn');
-  item.querySelector('.pulse-wrap').className = 'pulse-wrap ' + (present ? 'pw-ok' : 'pw-warn');
-  item.querySelector('.dpi-status').textContent = present ? 'OK' : '!';
+  if (present === null) {
+    item.className = 'dpi-item idle';
+    item.querySelector('.pulse-wrap').className = 'pulse-wrap pw-idle';
+    item.querySelector('.dpi-status').textContent = '—';
+  } else {
+    item.className = 'dpi-item ' + (present ? 'ok' : 'warn');
+    item.querySelector('.pulse-wrap').className = 'pulse-wrap ' + (present ? 'pw-ok' : 'pw-warn');
+    item.querySelector('.dpi-status').textContent = present ? 'OK' : '!';
+  }
   if (!skipCheck) checkCompliance();
 }
 
+var ultimoEsitoCheck = null;
+var analisiAvviata = false;
+
 function checkCompliance() {
   if (!currentActivity) return;
+  if (!analisiAvviata) return;
   var richiesti = DPI_RICHIESTI[currentActivity] || [];
-  var mancanti  = richiesti.filter(function(d) { return dpiState[d] === false; });
+  var mancanti = richiesti.filter(function(d) { return dpiState[d] !== true; });
   var badge     = document.getElementById('dpiBadge');
+  var esitoAttuale = mancanti.length === 0 ? 'conforme' : mancanti.join(',');
+
+  if (esitoAttuale === ultimoEsitoCheck) return;
+  ultimoEsitoCheck = esitoAttuale;
+
   if (mancanti.length === 0) {
     badge.textContent = 'Tutti OK';
     badge.className   = 'panel-badge ok';
-    if (!sessioneSalvata) {
-      addMessage('success', '✓ DPI verificati. Puoi procedere in sicurezza.');
-      salvaSessione('conforme');
-      sessioneSalvata = true;
-    }
+    addMessage('success', '✓ DPI verificati. Puoi procedere in sicurezza.');
+    salvaSessione('conforme');
+    sessioneSalvata = true;
   } else {
     badge.textContent = mancanti.length + (mancanti.length > 1 ? ' mancanti' : ' mancante');
     badge.className   = 'panel-badge warn';
-    if (!sessioneSalvata) {
-      var lista = mancanti.map(function(d) { return d.charAt(0).toUpperCase() + d.slice(1); }).join(', ');
-      addMessage('alert', 'Attenzione: mancano ' + lista + '. Indossali prima di procedere.');
-      salvaSessione('non conforme');
-      sessioneSalvata = true;
-    }
+    var lista = mancanti.map(function(d) { return d.charAt(0).toUpperCase() + d.slice(1); }).join(', ');
+    addMessage('alert', 'DPI mancanti: ' + lista + '. Indossali prima di procedere.');
+    if (!sessioneSalvata) { salvaSessione('non conforme'); sessioneSalvata = true; }
   }
 }
 
 function setDPIIdle() {
    sessioneSalvata = false;
+   ultimoEsitoCheck = null;
+   analisiAvviata = false;
+   classificaInCorso = false;
+   statoStabile = { occhiali: null, mascherina: null };
+   contatoreStabile = { occhiali: 0, mascherina: 0 };
   ['occhiali','guanti','mascherina','camice'].forEach(function(k) {
     dpiState[k] = null;
     var item = document.getElementById('dpi-' + k);
@@ -182,6 +207,39 @@ function setDPIIdle() {
   });
   document.getElementById('dpiBadge').textContent = 'in attesa';
   document.getElementById('dpiBadge').className   = 'panel-badge';
+  ['occhiali','guanti','mascherina','camice'].forEach(function(k) {
+  var item = document.getElementById('dpi-' + k);
+  if (item) item.classList.remove('dpi-inactive');
+});
+  var overlay = document.getElementById('classOverlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function setDPIPending(activityKey) {
+  var richiesti = DPI_RICHIESTI[activityKey] || [];
+  richiesti.forEach(function(k) {
+    var item = document.getElementById('dpi-' + k);
+    if (!item) return;
+    item.className = 'dpi-item pending';
+    item.querySelector('.pulse-wrap').className = 'pulse-wrap pw-pending';
+    item.querySelector('.dpi-status').textContent = '?';
+  });
+}
+
+function aggiornaDPIVisibility(activityKey) {
+  var richiesti = DPI_RICHIESTI[activityKey] || [];
+  var nonRilevabili = ['guanti', 'camice']; // Full Body — release futura
+  ['occhiali', 'guanti', 'mascherina', 'camice'].forEach(function(k) {
+    var item = document.getElementById('dpi-' + k);
+    if (!item) return;
+    if (nonRilevabili.indexOf(k) !== -1) {
+      item.classList.add('dpi-inactive');
+    } else if (richiesti.indexOf(k) === -1) {
+      item.classList.remove('dpi-inactive');
+    } else {
+      item.classList.remove('dpi-inactive');
+    }
+  });
 }
 
 function updateConfidence(value) {
@@ -225,8 +283,9 @@ function updateRisk(activityKey) {
 
 function salvaSessione(esito) {
   if (!currentActivity) return;
-  var dpiMancanti   = Object.keys(dpiState).filter(function(k) { return dpiState[k] === false; });
-  var dpiVerificati = Object.keys(dpiState).filter(function(k) { return dpiState[k] === true; });
+  var richiesti     = DPI_RICHIESTI[currentActivity] || [];
+  var dpiMancanti   = richiesti.filter(function(k) { return dpiState[k] === false; });
+  var dpiVerificati = richiesti.filter(function(k) { return dpiState[k] === true; });
   fetch('/api/sessioni', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -273,6 +332,9 @@ function sendQuickReply(text) {
   processUserMessage(text);
 }
 
+/**
+ * Invia messaggi utente al chatbot Dialogflow.
+ */
 function processUserMessage(text) {
   var dpiRilevati = Object.keys(dpiState).filter(function(k) { return dpiState[k] === true; });
   fetch('/api/dialogflow', {
@@ -287,15 +349,26 @@ function processUserMessage(text) {
   })
   .then(function(res) { return res.json(); })
   .then(function(data) {
+    var ATTIVITA_NON_DISPONIBILI = ['miscelazione_acidi', 'uso_fiamme', 'uso_solventi', 'titolazione'];
+    if (data.attivita && ATTIVITA_NON_DISPONIBILI.indexOf(data.attivita) !== -1) {
+      analisiAvviata = false;
+      currentActivity = null;
+      updateRisk(null);
+      setDPIIdle();
+      addMessage('alert', 'Questa attività richiede il rilevamento Full Body, non ancora disponibile in questa versione. Prova con: pesatura reagenti, lettura pH, preparazione tamponi o campionamento.');
+      return;
+  }
     if (data.attivita && data.attivita !== currentActivity) {
       currentActivity = data.attivita;
       updateRisk(currentActivity);
       setDPIIdle();
+      aggiornaDPIVisibility(currentActivity);
     if (streamActive) {
       setTimeout(function() { classificaConTM(); }, 1200);
     } else if (document.getElementById('uploadPreview').style.display !== 'none') {
       setTimeout(function() { classificaConTM(); }, 1200);
     } else {
+      setDPIPending(currentActivity);
       addMessage('bot', 'Attività registrata. Avvia la webcam o carica un\'immagine per analizzare i DPI.');
     }
 }
@@ -307,10 +380,18 @@ function processUserMessage(text) {
     tipo = 'alert';
   }
   if (data.intent === 'Default Welcome Intent') {
-    testo = 'Ciao ' + operatoreCorrente + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?';
+    testo = 'Salve ' + operatoreCorrente + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?';
   }
   if (data.intent !== 'Inizio_Attivita') {
     addMessage(tipo, testo);
+  }
+  if (data.intent === 'Cambio_Attivita') {
+    currentActivity = null;
+    updateRisk(null);
+    setDPIIdle();
+    sessioneSalvata = false;
+    fermaLoopTM();
+    document.getElementById('quickReplies').style.display = '';
   }
 }
 
@@ -321,26 +402,6 @@ function processUserMessage(text) {
   .catch(function() {
     addMessage('bot', 'Errore di connessione al server. Riprova.');
   });
-}
-
-function simulateDPIDetection(activityKey) {
-  showAnalyzing(true);
-  var richiesti = DPI_RICHIESTI[activityKey] || [];
-  var tutti     = ['occhiali', 'guanti', 'mascherina', 'camice'];
-  var mancante  = richiesti[Math.floor(Math.random() * richiesti.length)];
-  setTimeout(function() {
-    showAnalyzing(false);
-    tutti.forEach(function(d) {
-      updateDPI(d, richiesti.indexOf(d) !== -1 ? d !== mancante : false, true);
-    });
-    checkCompliance();
-    updateConfidence(65 + Math.random() * 20);
-    setTimeout(function() {
-      tutti.forEach(function(d) { updateDPI(d, richiesti.indexOf(d) !== -1, true); });
-      checkCompliance();
-      updateConfidence(88 + Math.random() * 10);
-    }, 3000);
-  }, 1500);
 }
 
 async function caricaModelloTM() {
@@ -354,25 +415,28 @@ async function caricaModelloTM() {
   }
 }
 
+/**
+ * Loop principale di inferenza: estrae frame, ottiene la ROI e la classifica tramite TM.
+ */
 async function classificaConTM() {
   if (!tmModel) return;
   if (!currentActivity) return;
-
+  if (classificaInCorso) return; 
+  classificaInCorso = true;     
   var source = null;
   var isVideo = false;
   if (streamActive) {
     var video = document.getElementById('videoFeed');
-    if (!video || video.readyState < 2) return; // video non ancora pronto
+    if (!video || video.readyState < 2) { classificaInCorso = false; return; }
     source = video;
     isVideo = true;
   } else {
     var preview = document.getElementById('uploadPreview');
-    if (!preview || preview.style.display === 'none' || !preview.src) return;
+    if (!preview || preview.style.display === 'none' || !preview.src) { classificaInCorso = false; return; }
     source = preview;
   }
 
   try {
-    // 1. Estrai il frame in Base64
     var canvas = document.createElement('canvas');
     if (isVideo) {
       canvas.width = source.videoWidth;
@@ -384,8 +448,6 @@ async function classificaConTM() {
     var ctx = canvas.getContext('2d');
     ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
     var base64Img = canvas.toDataURL('image/jpeg', 0.8);
-
-    // 2. Invia al backend per estrazione ROI
     showAnalyzing(true);
     var res = await fetch('/api/process-frame', {
       method: 'POST',
@@ -399,10 +461,9 @@ async function classificaConTM() {
       console.warn('[TM] Nessun volto rilevato da YOLOv8 o errore:', data.message);
       var oldOverlay = document.getElementById('roiOverlay');
       if (oldOverlay) oldOverlay.style.display = 'none';
-      return; // Salta l'inferenza se non ci sono volti
+      classificaInCorso = false;
+      return;
     }
-
-    // Visualizza la ROI a schermo
     var roiOverlay = document.getElementById('roiOverlay');
     if (!roiOverlay) {
       roiOverlay = document.createElement('div');
@@ -410,8 +471,6 @@ async function classificaConTM() {
       roiOverlay.style.cssText = 'position:absolute; bottom:16px; right:16px; width:76px; height:76px; border:2px solid #34c759; border-radius:10px; overflow:hidden; z-index:10; box-shadow: 0 4px 12px rgba(0,0,0,0.3); background:#000;';
       roiOverlay.innerHTML = '<img id="roiImageDisplay" style="width:100%; height:100%; object-fit:cover;" /><div style="position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.7); color:white; font-size:9px; text-align:center; padding:3px 0; font-weight:600; letter-spacing:0.05em;">FACE ROI</div>';
     }
-    
-    // Assicurati che il contenitore sia relative e appendi l'overlay
     var parentArea = isVideo ? document.getElementById('webcamArea') : document.getElementById('uploadArea');
     if (parentArea) {
       parentArea.style.position = 'relative';
@@ -420,12 +479,34 @@ async function classificaConTM() {
     
     roiOverlay.style.display = 'block';
     document.getElementById('roiImageDisplay').src = data.face_rois[0];
-
-    // 3. Esegui l'inferenza TM sulla Face ROI
     var roiImg = new Image();
     roiImg.onload = async function() {
       var predictions = await tmModel.predict(roiImg);
-      console.log('[TM] Predictions on ROI:', predictions);
+      // Overlay classificazione
+      var overlay = document.getElementById('classOverlay');
+      if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'classOverlay';
+      overlay.style.cssText = 'position:absolute; top:8px; left:8px; background:rgba(0,122,255,0.75); border-radius:8px; padding:8px 10px; width:148px; z-index:10;';
+      overlay.innerHTML = '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;"><i class="ti ti-shield-check" style="font-size:13px;color:#ffffff;"></i><div><div style="font-size:9px;font-weight:500;color:#ffffff;letter-spacing:0.03em;">Classificazione</div><div style="font-size:8px;color:rgba(255,255,255,0.7);">Face Model</div></div></div><div id="classOverlayBars"></div>';
+      parentArea.appendChild(overlay);
+    }
+
+var classi = predictions.slice().sort(function(a,b){ return b.probability - a.probability; });
+var barsHtml = classi.map(function(p) {
+  var pct = Math.round(p.probability * 100);
+  var isTop = p === classi[0];
+  var barColor = isTop ? '#30d158' : '#636366';
+  var valColor = isTop ? '#30d158' : '#aeaeb2';
+  return '<div style="margin-bottom:4px;">' +
+    '<div style="display:flex;justify-content:space-between;margin-bottom:2px;">' +
+    '<span style="font-size:10px;color:#e0e0e0;">' + p.className + '</span>' +
+    '<span style="font-size:10px;font-weight:500;color:' + valColor + ';">' + pct + '%</span></div>' +
+    '<div style="height:2px;border-radius:2px;background:rgba(255,255,255,0.12);">' +
+    '<div style="width:' + pct + '%;height:100%;background:' + barColor + ';border-radius:2px;"></div></div></div>';
+}).join('');
+document.getElementById('classOverlayBars').innerHTML = barsHtml;
+overlay.style.display = 'block';
 
       var occhiali   = false;
       var mascherina = false;
@@ -434,22 +515,42 @@ async function classificaConTM() {
       predictions.forEach(function(p) {
         if (p.probability > maxConf) maxConf = p.probability;
         var cls = p.className.toLowerCase();
-        if (cls === 'occhiali'   && p.probability > 0.6) occhiali   = true;
-        if (cls === 'mascherina' && p.probability > 0.6) mascherina = true;
-        if (cls === 'entrambi'   && p.probability > 0.6) { occhiali = true; mascherina = true; }
+        if (cls === 'occhiali'   && p.probability > 0.75) occhiali   = true;
+        if (cls === 'mascherina' && p.probability > 0.75) mascherina = true;
+        if (cls === 'entrambi'   && p.probability > 0.75) { occhiali = true; mascherina = true; }
       });
 
-      updateDPI('occhiali',   occhiali,   true);
-      updateDPI('mascherina', mascherina, true);
-      updateDPI('guanti',     false,      true);
-      updateDPI('camice',     false,      true);
+      var richiesti = DPI_RICHIESTI[currentActivity] || [];
+
+      ['occhiali', 'mascherina'].forEach(function(dpi) {
+        if (richiesti.indexOf(dpi) === -1) return;
+        var nuovoStato = dpi === 'occhiali' ? occhiali : mascherina;
+        
+        var sogliaAttuale = isVideo ? SOGLIA_STABILITA : 1;
+
+        if (nuovoStato === statoStabile[dpi]) {
+          contatoreStabile[dpi] = 0;
+        } else {
+          contatoreStabile[dpi]++;
+          if (contatoreStabile[dpi] >= sogliaAttuale) {
+            statoStabile[dpi] = nuovoStato;
+            contatoreStabile[dpi] = 0;
+            updateDPI(dpi, nuovoStato, true);
+          }
+        }
+      });
+updateDPI('guanti', null, true);
+updateDPI('camice', null, true);
       updateConfidence(Math.round(maxConf * 100));
+      analisiAvviata = true;
       checkCompliance();
+      classificaInCorso = false;
     };
     roiImg.src = data.face_rois[0];
 
   } catch(e) {
     showAnalyzing(false);
+    classificaInCorso = false;
     console.error('[TM] Errore classificazione:', e);
   }
 }
@@ -462,7 +563,7 @@ function avviaLoopTM() {
     if (streamActive && currentActivity && tmModel) {
       classificaConTM();
     }
-  }, 2000); // ogni 2 secondi
+  }, 2000);
 }
 
 function fermaLoopTM() {
@@ -508,20 +609,27 @@ function caricaStorico() {
         return;
       }
       rows.forEach(function(row) {
-        var initials = row.operatore.split(' ').map(function(w) { return w[0]; }).join('').toUpperCase().slice(0, 2);
+        var initials = row.operatore.split(' ').filter(function(w) { return w.length > 0; }).map(function(w) { return w[0]; }).join('').toUpperCase();
         var isOk     = row.esito === 'conforme';
         var orario   = new Date(row.fine).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
         var attivita = (row.attivita || '').replace(/_/g, ' ');
         var mancanti = JSON.parse(row.dpi_mancanti || '[]');
-        var dettaglio = isOk ? attivita : attivita + (mancanti.length ? ' · mancava ' + mancanti.join(', ') : '');
+        var dettaglio = isOk ? attivita : attivita + (mancanti.length ? ' · DPI mancanti: ' + mancanti.join(', ') : '');
         var item = document.createElement('div');
         item.className = 'log-item';
         item.innerHTML =
-          '<div class="log-avatar">' + initials + '</div>' +
-          '<div><div class="log-name">' + row.operatore + '</div><div class="log-detail">' + dettaglio + '</div></div>' +
-          '<span class="log-badge ' + (isOk ? 'ok' : 'warn') + '">' + (isOk ? 'Conforme' : 'Violazione') + '</span>' +
-          '<span class="log-time">' + orario + '</span>';
+          item.innerHTML =
+            '<div class="log-avatar">' + initials + '</div>' +
+            '<div><div class="log-name">' + row.operatore + '</div><div class="log-detail">' + dettaglio + '</div></div>' +
+            '<span class="log-badge ' + (isOk ? 'ok' : 'warn') + '">' + (isOk ? 'Conforme' : 'Violazione') + '</span>' +
+            '<span class="log-time">' + orario + '</span>' +
+            '<button class="log-delete" data-id="' + row.id + '"><i class="ti ti-trash"></i></button>';
         list.appendChild(item);
+        item.querySelector('.log-delete').addEventListener('click', function() {
+        var id = this.getAttribute('data-id');
+        fetch('/api/sessioni/' + id, { method: 'DELETE' })
+        .then(function() { caricaStorico(); });
+        });
       });
     });
 
@@ -536,12 +644,14 @@ function caricaStorico() {
 }
 
 function disegnaLinea(dati) {
-  var svg    = document.getElementById('lineChart');
-  var giorni = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
-  var oggi   = new Date();
+  var svg  = document.getElementById('lineChart');
+  var oggi = new Date();
+  var nomiGiorni = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+  var giorni = [];
   var punti  = [];
   for (var i = 6; i >= 0; i--) {
     var d   = new Date(oggi); d.setDate(oggi.getDate() - i);
+    giorni.push(nomiGiorni[d.getDay()]);
     var key = d.toISOString().slice(0, 10);
     var row = dati.find(function(r) { return r.giorno === key; });
     punti.push(row ? row.n : 0);
@@ -551,15 +661,11 @@ function disegnaLinea(dati) {
   var coords = punti.map(function(v, i) {
     return { x: Math.round(i * (W / 6)), y: Math.round(H - pad - (v / max) * (H - pad * 2)) };
   });
-
   var isDark  = document.body.classList.contains('dark');
   var lineCol = isDark ? '#0a84ff' : '#007aff';
   var textCol = isDark ? '#636366' : '#8e8e93';
-  var areaCol = isDark ? 'rgba(10,132,255,0.1)' : 'rgba(0,122,255,0.08)';
-
   var pathD   = coords.map(function(c, i) { return (i === 0 ? 'M' : 'L') + c.x + ',' + c.y; }).join(' ');
   var areaD   = pathD + ' L' + coords[coords.length-1].x + ',70 L0,70 Z';
-
   svg.innerHTML =
     '<defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="' + lineCol + '" stop-opacity="0.15"/><stop offset="100%" stop-color="' + lineCol + '" stop-opacity="0"/></linearGradient></defs>' +
     '<path d="' + areaD + '" fill="url(#lg)"/>' +
@@ -689,9 +795,8 @@ function leggiRisposta(testo) {
 
 document.addEventListener('DOMContentLoaded', function() {
   updateClock();
+  document.getElementById('streamVal').style.color = '#ff3b30';
   setInterval(updateClock, 10000);
-
-  // Carica mappatura DPI dal database
   fetch('/api/attivita')
     .then(function(r) { return r.json(); })
     .then(function(rows) {
@@ -701,12 +806,16 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
 
+  document.getElementById('operatoreInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') document.getElementById('startAppBtn').click();
+  });  
+
 document.getElementById('speakerBtn').addEventListener('click', function() {
   speechOutputEnabled = !speechOutputEnabled;
   var icon = document.getElementById('speakerIcon');
   icon.className = speechOutputEnabled ? 'ti ti-volume' : 'ti ti-volume-off';
   if (!speechOutputEnabled) {
-    window.speechSynthesis.cancel(); // ferma subito qualsiasi voce in corso
+    window.speechSynthesis.cancel();
   }
 });
 inizializzaVoce();
@@ -747,7 +856,7 @@ document.getElementById('tabStatistiche').addEventListener('click', function() {
     }
     operatoreCorrente = nome;
     document.getElementById('welcomeScreen').classList.add('hidden');
-    addMessage('bot', 'Ciao ' + nome + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?');
+    addMessage('bot', 'Salve ' + nome + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?');
   });
   caricaModelloTM();
 });

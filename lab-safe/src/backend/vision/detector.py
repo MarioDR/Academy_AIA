@@ -5,12 +5,15 @@ import os
 from pathlib import Path
 from ultralytics import YOLO
 
-# --- SUPPORTO PER FILE HEIC/HEIF (iPhone/Samsung) ---
+"""
+Modulo: detector.py
+Descrizione: Microservizio di vision (YOLOv8) per l'estrazione ROI di viso e corpo.
+"""
+
 from PIL import Image
 from pillow_heif import register_heif_opener
 register_heif_opener()
 
-# Costanti
 TARGET_SIZE = (224, 224)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -20,9 +23,7 @@ DEFAULT_BODY_RAW_DIR = os.path.join(BASE_DIR, "data", "raw", "Full-Body")
 
 def get_face_bbox_from_keypoints(keypoints, img_w, img_h, padding=0.5):
     """
-    Calcola la bounding box del volto basandosi sui keypoints facciali.
-    I keypoints di YOLOv8 Pose per il volto sono i primi 5:
-    0: nose, 1: left_eye, 2: right_eye, 3: left_ear, 4: right_ear
+    Calcola le coordinate del bounding box facciale.
     """
     face_kpts = keypoints[:5]
     valid_kpts = [kp for kp in face_kpts if kp[0] > 0 and kp[1] > 0]
@@ -121,8 +122,6 @@ def main():
             return
             
         print(f"[INFO] Elaborazione immagine: {args.source}")
-        
-        # Gestione lettura HEIC per immagine singola
         file_path = Path(args.source)
         if file_path.suffix.lower() in [".heic", ".heif"]:
             try:
@@ -186,8 +185,6 @@ def main():
         if not folder_path.is_dir():
             print(f"[ERRORE] Il percorso specificato non è una cartella: {args.source}")
             return
-            
-        # Logica di reindirizzamento dell'output
         if args.output:
             custom_out = Path(args.output)
             session_face_dir = os.path.join(custom_out, "Face", folder_path.name)
@@ -198,15 +195,11 @@ def main():
             
         os.makedirs(session_face_dir, exist_ok=True)
         os.makedirs(session_body_dir, exist_ok=True)
-        
-        # Aggiunta estensioni HEIC
         valid_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".heic", ".heif"}
         print(f"[INFO] Elaborazione e salvataggio in:\n -> {session_face_dir}\n -> {session_body_dir}")
         
         for file_path in folder_path.iterdir():
             if file_path.is_file() and file_path.suffix.lower() in valid_extensions:
-                
-                # Lettura adattiva (HEIC o standard)
                 if file_path.suffix.lower() in [".heic", ".heif"]:
                     try:
                         pil_img = Image.open(str(file_path)).convert('RGB')

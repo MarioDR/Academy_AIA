@@ -34,11 +34,20 @@ Webcam / Immagine → OpenCV (estrazione ROI) → Teachable Machine (classificaz
 
 | Modello | Classi | Stato |
 |---|---|---|
-| Face | Occhiali, Mascherina, Entrambi, Nessuno | 🟢 In sviluppo |
+| Face | Occhiali, Mascherina, Entrambi, Nessuno | 🟢 Completato |
 | Full Body | Camice, Guanti, Entrambi, Nessuno | 🔴 Release futura |
 
 ### Attività supportate
 
+#### Release 1.0 (Face Model)
+| Attività | DPI richiesti | Rischio |
+|---|---|---|
+| Pesatura reagenti | Mascherina | Basso |
+| Lettura pH | Occhiali | Basso |
+| Preparazione tamponi | Occhiali, Mascherina | Medio |
+| Campionamento | Occhiali, Mascherina | Medio |
+
+#### Release futura (Full Body Model)
 | Attività | DPI richiesti | Rischio |
 |---|---|---|
 | Miscelazione acidi | Occhiali, Guanti, Camice, Mascherina | Alto |
@@ -60,8 +69,7 @@ Webcam / Immagine → OpenCV (estrazione ROI) → Teachable Machine (classificaz
 ## Installazione e avvio
 
 ```bash
-# 1. Clonare il repository
-git clone https://github.com/MarioDR/Academy_AIA.git
+# 1. Caricare la cartella su VSCode
 cd Academy_AIA/lab-safe
 
 # 2. Installare le dipendenze Node
@@ -81,7 +89,7 @@ http://localhost:3000
 
 ---
 
-## Configurazione
+## Configurazione (se `env.txt` e `credentials.json` non sono inclusi)
 
 ### 1. Credenziali Dialogflow
 
@@ -112,6 +120,7 @@ lab-safe/
 │   └── labsafe.db             # Database SQLite 
 ├── docs/
 │   └── AIA_G11_PropostaProgettuale.pdf
+│   └── AIA_Gruppo11_PresentazioneProgetto.pptx.pdf
 ├── src/
 │   ├── backend/
 │   │   ├── app/
@@ -182,8 +191,8 @@ Gli intent configurati sono:
 | Backend Express + SQLite | 🟢 Completato |
 | Integrazione Dialogflow | 🟢 Completato |
 | Estrazione ROI con YOLOv8 Pose | 🟢 Completato |
-| Modello Teachable Machine — Face | 🟠 In sviluppo |
-| Integrazione TM → frontend | 🟠 In attesa del modello |
+| Modello Teachable Machine — Face | 🟢 Completato |
+| Integrazione TM → frontend | 🟢 Completato |
 | Modello Teachable Machine — Full Body | 🔴 Release futura |
 | Ottimizzazione luce variabile | 🔴 Release futura |
 | Flussi conversazionali aggiuntivi | 🔴 Release futura |
@@ -204,7 +213,7 @@ Gli intent configurati sono:
 
 ## Note per sviluppi futuri
 
-- Il modello Full Body (camice e guanti) è già supportato dall'architettura — basterà alimentare `updateDPI('camice', ...)` e `updateDPI('guanti', ...)` con il secondo modello TM
+- Il modello Full Body (camice e guanti) è già supportato dall'architettura — basterà popolare `updateDPI('camice', ...)` e `updateDPI('guanti', ...)` con il secondo modello TM
 
 ---
 
