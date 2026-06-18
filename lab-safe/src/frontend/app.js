@@ -490,7 +490,11 @@ async function classificaConTM() {
       overlay.style.cssText = 'position:absolute; top:8px; left:8px; background:rgba(0,122,255,0.75); border-radius:8px; padding:8px 10px; width:148px; z-index:10;';
       overlay.innerHTML = '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;"><i class="ti ti-shield-check" style="font-size:13px;color:#ffffff;"></i><div><div style="font-size:9px;font-weight:500;color:#ffffff;letter-spacing:0.03em;">Classificazione</div><div style="font-size:8px;color:rgba(255,255,255,0.7);">Face Model</div></div></div><div id="classOverlayBars"></div>';
       parentArea.appendChild(overlay);
-    }
+      }else {
+        if (overlay.parentNode !== parentArea) {
+          parentArea.appendChild(overlay);
+        }
+      }
 
 var classi = predictions.slice().sort(function(a,b){ return b.probability - a.probability; });
 var barsHtml = classi.map(function(p) {
