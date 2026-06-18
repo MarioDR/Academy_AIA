@@ -88,20 +88,37 @@ http://localhost:3000
 ```
 
 ---
-
-## Configurazione (se `env.txt` e `credentials.json` non sono inclusi)
-
-### 1. Credenziali Dialogflow
-
-Creare un file `env.txt` nella cartella `lab-safe/config/`:
-
+ 
+## Configurazione
+ 
+### 1. Creare il file `env.txt`
+ 
+Creare il file `lab-safe/config/env.txt` con il seguente contenuto:
+ 
 ```
 DIALOGFLOW_PROJECT_ID=newagent-jgxd
 GOOGLE_APPLICATION_CREDENTIALS=./config/credentials.json
 PORT=3000
 ```
+ 
+> Il Project ID `newagent-jgxd` è fisso — è il progetto Google Cloud del Gruppo 11.  
+> L'agente Dialogflow associato si chiama **Academy_AIA_Gruppo11**.
+ 
+---
+ 
+### 2. Ottenere il file `credentials.json`
+ 
+1. Accedere a [console.cloud.google.com](https://console.cloud.google.com)
+2. Selezionare il progetto **newagent-jgxd**
+3. Menu laterale → **IAM e amministrazione** → **Account di servizio**
+4. Cliccare sull'account di servizio associato al progetto dialogflow con id `newagent-jgxd`
+5. Tab **Chiavi** → **Aggiungi chiave** → **Crea nuova chiave** → **JSON** → **Crea**
+6. Rinominare il file scaricato in `credentials.json`
+7. Copiarlo nella cartella `lab-safe/config/`
+> Per accedere al progetto è necessario essere stati aggiunti come collaboratori (abbiamo aggiunto troiano@unisa.it).
+> Contattare il Gruppo 11 per richiedere l'accesso ed eventuali problemi nella configurazione.
 
-Inserire il file `credentials.json` (service account Google Cloud) nella cartella `lab-safe/config/`.  
+---
 
 ### 2. Struttura del progetto
 
@@ -144,8 +161,11 @@ lab-safe/
 `detector.py` usa YOLOv8 Pose per estrarre ROI facciali e corporee da immagini o webcam. È utile principalmente per **costruire il dataset** da fornire a Teachable Machine.
 
 ```bash
-# Elabora una cartella di immagini ed esporta le ROI nel dataset
+# Elabora una cartella di immagini ed esporta le ROI nel dataset (percorso default: data/raw/)
 python src/backend/vision/detector.py --mode folder --source /percorso/cartella
+
+# Elabora una cartella con output personalizzato
+python src/backend/vision/detector.py --mode folder --source /percorso/cartella --output /percorso/output
 
 # Testa su una singola immagine
 python src/backend/vision/detector.py --mode image --source /percorso/immagine.jpg
@@ -153,6 +173,9 @@ python src/backend/vision/detector.py --mode image --source /percorso/immagine.j
 # Testa in tempo reale con webcam
 python src/backend/vision/detector.py --mode webcam
 ```
+
+> Formati supportati: JPG, PNG, BMP, HEIC, HEIF.  
+> Le ROI vengono salvate in `data/raw/Face/<nome_cartella>/` e `data/raw/Full-Body/<nome_cartella>/` salvo diversa indicazione con `--output`.
 
 ---
 
@@ -180,6 +203,7 @@ Gli intent configurati sono:
 7. L'operatore indossa il DPI mancante
 8. Il sistema rileva il cambio di stato: *"DPI verificati. Puoi procedere con l'esperimento."*
 9. La sessione viene salvata nel database e visibile nello storico
+10. L'operatore può cambiare attività (es. digitando in chat "cambio", "altra attività") o chiudere l'app. 
 
 ---
 
@@ -216,5 +240,10 @@ Gli intent configurati sono:
 - Il modello Full Body (camice e guanti) è già supportato dall'architettura — basterà popolare `updateDPI('camice', ...)` e `updateDPI('guanti', ...)` con il secondo modello TM
 
 ---
+
+## 🐺 Team Members
+- [**Amato Francesca Gaia**](https://github.com/famato46)
+- [**Bavaro Mattia Gerardo**](https://github.com/mattiajb)
+- [**Dello Russo Mario**](https://github.com/MarioDR)
 
 *Academy di Intelligenza Artificiale · Gruppo 11 · 2025/2026*
