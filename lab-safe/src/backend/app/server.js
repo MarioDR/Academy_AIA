@@ -54,6 +54,9 @@ if (count.n === 0) {
   insert.run('uso_fiamme',               JSON.stringify(['occhiali','guanti','camice']),         'Alto');
   insert.run('uso_solventi',             JSON.stringify(['occhiali','guanti','mascherina']),     'Medio');
   insert.run('titolazione',              JSON.stringify(['occhiali','guanti']),                  'Medio');
+  insert.run('sterilizzazione',      JSON.stringify(['guanti', 'camice']), 'Medio');
+  insert.run('pipettaggio',          JSON.stringify(['guanti']),           'Basso');
+  insert.run('briefing_laboratorio', JSON.stringify(['camice']),           'Basso');
 }
 
 app.use(express.json({ limit: '50mb' }));

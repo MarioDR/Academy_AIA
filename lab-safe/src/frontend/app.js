@@ -12,6 +12,9 @@ var DPI_RICHIESTI = {
   uso_fiamme:           ['occhiali', 'guanti', 'camice'],
   uso_solventi:         ['occhiali', 'guanti', 'mascherina'],
   titolazione:          ['occhiali', 'guanti'],
+  sterilizzazione:      ['guanti', 'camice'],
+  pipettaggio:          ['guanti'],
+  briefing_laboratorio: ['camice'],
 };
 
 var RISCHIO_LABEL = {
@@ -23,10 +26,15 @@ var RISCHIO_LABEL = {
   uso_fiamme:           'Alto · uso fiamme libere',
   uso_solventi:         'Medio · uso solventi',
   titolazione:          'Medio · titolazione',
+  sterilizzazione:      'Medio · sterilizzazione',
+  pipettaggio:          'Basso · pipettaggio',
+  briefing_laboratorio: 'Basso · briefing laboratorio',
 };
 
 var classificaInCorso = false;
 var tmModel = null;
+var tmModelFB = null;
+var tmModelFBURL = '/models/full_body/';
 var tmModelURL = '/models/face/';
 var sessioneSalvata = false;
 var speechOutputEnabled = true;
@@ -71,6 +79,8 @@ function switchTab(tab) {
     if (roiOverlay) roiOverlay.style.display = 'none';
     var classOverlay = document.getElementById('classOverlay');
     if (classOverlay) classOverlay.style.display = 'none';
+    var bodyRoiOverlay = document.getElementById('bodyRoiOverlay');
+    if (bodyRoiOverlay) bodyRoiOverlay.style.display = 'none';
   }
 }
 
@@ -228,17 +238,10 @@ function setDPIPending(activityKey) {
 
 function aggiornaDPIVisibility(activityKey) {
   var richiesti = DPI_RICHIESTI[activityKey] || [];
-  var nonRilevabili = ['guanti', 'camice']; // Full Body — release futura
   ['occhiali', 'guanti', 'mascherina', 'camice'].forEach(function(k) {
     var item = document.getElementById('dpi-' + k);
     if (!item) return;
-    if (nonRilevabili.indexOf(k) !== -1) {
-      item.classList.add('dpi-inactive');
-    } else if (richiesti.indexOf(k) === -1) {
-      item.classList.remove('dpi-inactive');
-    } else {
-      item.classList.remove('dpi-inactive');
-    }
+    item.classList.remove('dpi-inactive');
   });
 }
 
@@ -349,15 +352,6 @@ function processUserMessage(text) {
   })
   .then(function(res) { return res.json(); })
   .then(function(data) {
-    var ATTIVITA_NON_DISPONIBILI = ['miscelazione_acidi', 'uso_fiamme', 'uso_solventi', 'titolazione'];
-    if (data.attivita && ATTIVITA_NON_DISPONIBILI.indexOf(data.attivita) !== -1) {
-      analisiAvviata = false;
-      currentActivity = null;
-      updateRisk(null);
-      setDPIIdle();
-      addMessage('alert', 'Questa attività richiede il rilevamento Full Body, non ancora disponibile in questa versione. Prova con: pesatura reagenti, lettura pH, preparazione tamponi o campionamento.');
-      return;
-  }
     if (data.attivita && data.attivita !== currentActivity) {
       currentActivity = data.attivita;
       updateRisk(currentActivity);
@@ -396,7 +390,7 @@ function processUserMessage(text) {
 }
 
     if (!data.attivita && !currentActivity && (!data.intent || data.intent === 'Default Fallback Intent')) {
-      addMessage('bot', 'Attività non riconosciuta. Prova con: "miscelazione acidi", "uso fiamme", "uso solventi" o "titolazione".');
+      addMessage('bot', 'Attività non riconosciuta. Prova con: pesatura reagenti, lettura pH, preparazione tamponi, campionamento, miscelazione acidi, uso fiamme, uso solventi o titolazione.');
     }
   })
   .catch(function() {
@@ -412,6 +406,15 @@ async function caricaModelloTM() {
     console.log('[TM] Modello caricato.');
   } catch(e) {
     console.error('[TM] Errore caricamento modello:', e);
+  }
+}
+
+async function caricaModelloFB() {
+  try {
+    tmModelFB = await tmImage.load(tmModelFBURL + 'model.json', tmModelFBURL + 'metadata.json');
+    console.log('[TM] Modello Full Body caricato.');
+  } catch(e) {
+    console.error('[TM] Errore caricamento modello FB:', e);
   }
 }
 
@@ -478,6 +481,21 @@ async function classificaConTM() {
     }
     
     roiOverlay.style.display = 'block';
+  if (data.body_rois && data.body_rois.length > 0) {
+  var bodyOverlay = document.getElementById('bodyRoiOverlay');
+  if (!bodyOverlay) {
+    bodyOverlay = document.createElement('div');
+    bodyOverlay.id = 'bodyRoiOverlay';
+    bodyOverlay.style.cssText = 'position:absolute; bottom:16px; left:16px; width:76px; height:76px; border:2px solid #ff9500; border-radius:10px; overflow:hidden; z-index:10; box-shadow: 0 4px 12px rgba(0,0,0,0.3); background:#000;';
+    bodyOverlay.innerHTML = '<img id="bodyRoiImageDisplay" style="width:100%; height:100%; object-fit:cover;" /><div style="position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.7); color:white; font-size:9px; text-align:center; padding:3px 0; font-weight:600; letter-spacing:0.05em;">FULL-BODY ROI</div>';
+  }
+  if (bodyOverlay.parentNode !== parentArea) parentArea.appendChild(bodyOverlay);
+  bodyOverlay.style.display = 'block';
+  document.getElementById('bodyRoiImageDisplay').src = data.body_rois[0];
+} else {
+  var bodyOverlay = document.getElementById('bodyRoiOverlay');
+  if (bodyOverlay) bodyOverlay.style.display = 'none';
+}
     document.getElementById('roiImageDisplay').src = data.face_rois[0];
     var roiImg = new Image();
     roiImg.onload = async function() {
@@ -543,12 +561,34 @@ overlay.style.display = 'block';
           }
         }
       });
-updateDPI('guanti', null, true);
-updateDPI('camice', null, true);
       updateConfidence(Math.round(maxConf * 100));
-      analisiAvviata = true;
-      checkCompliance();
-      classificaInCorso = false;
+      if (tmModelFB && data.body_rois && data.body_rois.length > 0) {
+        var bodyImg = new Image();
+        bodyImg.onload = async function() {
+          var predFB = await tmModelFB.predict(bodyImg);
+          var guanti = false;
+          var camice = false;
+          predFB.forEach(function(p) {
+            var cls = p.className.toLowerCase();
+            if (cls === 'guanti'   && p.probability > 0.75) guanti = true;
+            if (cls === 'camice'   && p.probability > 0.75) camice = true;
+            if (cls === 'entrambi' && p.probability > 0.75) { guanti = true; camice = true; }
+          });
+          var richiesti = DPI_RICHIESTI[currentActivity] || [];
+          if (richiesti.indexOf('guanti') !== -1) updateDPI('guanti', guanti, true);
+          if (richiesti.indexOf('camice') !== -1) updateDPI('camice', camice, true);
+          analisiAvviata = true;
+          checkCompliance();
+          classificaInCorso = false;
+        };
+        bodyImg.src = data.body_rois[0];
+      } else {
+        updateDPI('guanti', null, true);
+        updateDPI('camice', null, true);
+        analisiAvviata = true;
+        checkCompliance();
+        classificaInCorso = false;
+      }
     };
     roiImg.src = data.face_rois[0];
 
@@ -863,4 +903,5 @@ document.getElementById('tabStatistiche').addEventListener('click', function() {
     addMessage('bot', 'Salve ' + nome + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?');
   });
   caricaModelloTM();
+  caricaModelloFB();
 });
