@@ -65,6 +65,25 @@ def get_face_bbox_from_keypoints(keypoints, img_w, img_h, padding=0.5):
         
     return final_x_min, final_y_min, final_x_max, final_y_max
 
+def apply_light_preprocessing(img):
+    """
+    Applica CLAHE (Contrast Limited Adaptive Histogram Equalization) al canale della luminosità
+    per correggere problemi di illuminazione (es. controluce, ombre sul viso) mantenendo i colori originali.
+    """
+    # Conversione in spazio colore LAB
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    
+    # Applicazione CLAHE 
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    cl = clahe.apply(l)
+    
+    # Merge dei canali e riconversione in BGR
+    limg = cv2.merge((cl,a,b))
+    final = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+    
+    return final
+
 def process_frame(frame, model):
     img_h, img_w = frame.shape[:2]
     results = model(frame, verbose=False)
@@ -85,7 +104,8 @@ def process_frame(frame, model):
             body_roi = frame[y1:y2, x1:x2]
             if body_roi.size > 0:
                 body_roi_resized = cv2.resize(body_roi, TARGET_SIZE)
-                body_rois.append(body_roi_resized)
+                body_roi_preprocessed = apply_light_preprocessing(body_roi_resized)
+                body_rois.append(body_roi_preprocessed)
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
                 cv2.putText(frame, "Body", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
             
@@ -97,7 +117,8 @@ def process_frame(frame, model):
                 face_roi = frame[fy1:fy2, fx1:fx2]
                 if face_roi.size > 0:
                     face_roi_resized = cv2.resize(face_roi, TARGET_SIZE)
-                    face_rois.append(face_roi_resized)
+                    face_roi_preprocessed = apply_light_preprocessing(face_roi_resized)
+                    face_rois.append(face_roi_preprocessed)
                     cv2.rectangle(frame, (fx1, fy1), (fx2, fy2), (0, 255, 0), 2)
                     cv2.putText(frame, "Face", (fx1, fy1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                     
