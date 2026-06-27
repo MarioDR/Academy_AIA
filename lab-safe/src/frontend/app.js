@@ -505,7 +505,7 @@ async function classificaConTM() {
       if (!overlay) {
       overlay = document.createElement('div');
       overlay.id = 'classOverlay';
-      overlay.style.cssText = 'position:absolute; top:8px; left:8px; background:rgba(0,122,255,0.75); border-radius:8px; padding:8px 10px; width:148px; z-index:10;';
+      overlay.style.cssText = 'position:absolute; top:8px; right:8px; background:rgba(0,122,255,0.75); border-radius:8px; padding:8px 10px; width:148px; z-index:10;';
       overlay.innerHTML = '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;"><i class="ti ti-shield-check" style="font-size:13px;color:#ffffff;"></i><div><div style="font-size:9px;font-weight:500;color:#ffffff;letter-spacing:0.03em;">Classificazione</div><div style="font-size:8px;color:rgba(255,255,255,0.7);">Face Model</div></div></div><div id="classOverlayBars"></div>';
       parentArea.appendChild(overlay);
       }else {
@@ -577,12 +577,45 @@ overlay.style.display = 'block';
           var richiesti = DPI_RICHIESTI[currentActivity] || [];
           if (richiesti.indexOf('guanti') !== -1) updateDPI('guanti', guanti, true);
           if (richiesti.indexOf('camice') !== -1) updateDPI('camice', camice, true);
+          
+          // Overlay classificazione Full-Body
+          var overlayFB = document.getElementById('classOverlayFB');
+          if (!overlayFB) {
+            overlayFB = document.createElement('div');
+            overlayFB.id = 'classOverlayFB';
+            overlayFB.style.cssText = 'position:absolute; top:8px; left:8px; background:rgba(209, 122, 0, 0.75); border-radius:8px; padding:8px 10px; width:148px; z-index:10;';
+            overlayFB.innerHTML = '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;"><i class="ti ti-shield-check" style="font-size:13px;color:#ffffff;"></i><div><div style="font-size:9px;font-weight:500;color:#ffffff;letter-spacing:0.03em;">Classificazione</div><div style="font-size:8px;color:rgba(255,255,255,0.7);">Full-Body Model</div></div></div><div id="classOverlayBarsFB"></div>';
+            parentArea.appendChild(overlayFB);
+          } else {
+            if (overlayFB.parentNode !== parentArea) {
+              parentArea.appendChild(overlayFB);
+            }
+          }
+
+          var classiFB = predFB.slice().sort(function(a,b){ return b.probability - a.probability; });
+          var barsHtmlFB = classiFB.map(function(p) {
+            var pct = Math.round(p.probability * 100);
+            var isTop = p === classiFB[0];
+            var barColor = isTop ? '#30d158' : 'rgba(98, 98, 98, 0.4)';
+            var valColor = isTop ? '#30d158' : '#aeaeb2';
+            return '<div style="margin-bottom:4px;">' +
+              '<div style="display:flex;justify-content:space-between;margin-bottom:2px;">' +
+              '<span style="font-size:10px;color:#e0e0e0;">' + p.className + '</span>' +
+              '<span style="font-size:10px;font-weight:500;color:' + valColor + ';">' + pct + '%</span></div>' +
+              '<div style="height:2px;border-radius:2px;background:rgba(255,255,255,0.12);">' +
+              '<div style="width:' + pct + '%;height:100%;background:' + barColor + ';border-radius:2px;"></div></div></div>';
+          }).join('');
+          document.getElementById('classOverlayBarsFB').innerHTML = barsHtmlFB;
+          overlayFB.style.display = 'block';
+
           analisiAvviata = true;
           checkCompliance();
           classificaInCorso = false;
         };
         bodyImg.src = data.body_rois[0];
       } else {
+        var overlayFB = document.getElementById('classOverlayFB');
+        if (overlayFB) overlayFB.style.display = 'none';
         updateDPI('guanti', null, true);
         updateDPI('camice', null, true);
         analisiAvviata = true;
