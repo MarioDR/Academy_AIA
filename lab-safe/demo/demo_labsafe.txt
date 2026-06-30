@@ -1,0 +1,119 @@
+LAB-SAFE — SCRIPT DEMO COMPLETA
+Gruppo 11 · AI Academy 2025/2026
+
+
+1. SETUP E AVVIO
+-----------------
+- Avviare il server: npm start
+- Aprire il browser su localhost:3000
+
+
+2. LOGIN E SISTEMA UTENTI
+--------------------------
+- Mostrare la welcome screen con i 4 step illustrati
+- Accedere con un utente dottore: username "mrossi", password "1234"
+  -> Verificare saluto "Salve Dr. Rossi!"
+- (Facoltativo) Logout e nuovo accesso con uno studente: username "lverdi", password "1234"
+  -> Verificare saluto "Salve Luca!"
+- Mostrare toggle Dark/Light Mode 
+
+
+3. RICONOSCIMENTO FACCIALE — FACE MODEL (occhiali / mascherina)
+------------------------------------------------------------------
+- Dichiarare un'attività che richiede solo Face Model, es. "pesatura reagenti"
+  (DPI richiesti: mascherina)
+- Avviare la webcam (tab "Webcam live")
+- Mostrarsi senza mascherina -> verificare badge "DPI mancanti" e alert in chat
+- Indossare la mascherina -> verificare:
+  - overlay FACE ROI (in basso a destra)
+  - overlay classificazione "Face Model" (in alto a destra) con barre di probabilità
+  - stato DPI aggiornato a "OK" con badge verde
+  - messaggio "DPI verificati. Puoi procedere in sicurezza"
+
+
+4. RICONOSCIMENTO CORPO INTERO — FULL-BODY MODEL (guanti / camice)
+-----------------------------------------------------------------------
+- Cambiare attività, es. "titolazione" (richiede occhiali + guanti)
+- Posizionarsi a figura intera davanti alla webcam
+- Verificare:
+  - overlay FULL-BODY ROI (in basso a sinistra)
+  - overlay classificazione "Full-Body Model" (in alto a sinistra)
+  - rilevamento combinato Face + Full-Body in tempo reale
+  - aggiornamento simultaneo dello stato DPI (occhiali + guanti)
+
+
+5. FLUSSO CONVERSAZIONALE GUIDATO — FASI DELL'ESPERIMENTO (UC07)
+---------------------------------------------------------------------
+- Dopo la verifica DPI, mostrare l'avvio automatico delle fasi guidate
+  ("Fase 1 di N: ...")
+- Mostrare overlay fase (in alto al centro dello stream)
+- Comandi vocali/testuali da dimostrare:
+  - "avanti" / "fatto" -> avanza alla fase successiva
+  - "ripeti" -> ripete la fase corrente
+  - arrivati all'ultima fase, dire "ho finito" -> messaggio di completamento
+    esperimento con riepilogo DPI
+- Dimostrare la sospensione automatica delle fasi se un DPI viene rimosso
+  durante l'esperimento, e la ripresa quando viene reindossato
+
+
+6. UPLOAD IMMAGINE (modalità alternativa alla webcam)
+----------------------------------------------------------
+- Passare al tab "Upload immagine"
+- Caricare una foto con operatore e DPI visibili
+- Verificare analisi automatica DPI sull'immagine statica
+- Avanzare le fasi manualmente via chat (stesso flusso della webcam)
+
+
+7. CAMBIO ATTIVITA' DURANTE L'ESPERIMENTO
+-----------------------------------------------
+- Durante le fasi guidate, scrivere "cambia attività"
+- Verificare richiesta di conferma ("Sei sicuro...? Rispondi confermo o annulla")
+- Scrivere "confermo" -> reset completo, ritorno alla scelta attività
+- (Facoltativo) Ripetere e scrivere "annulla" -> ripresa dalla fase corrente
+
+
+8. COMANDI CONVERSAZIONALI AGGIUNTIVI (Dialogflow)
+--------------------------------------------------------
+- "come smaltisco i rifiuti" -> risposta su procedura di smaltimento
+- "emergenza" -> messaggio di sicurezza con rimando a SDS e responsabile
+- "info" -> elenco comandi disponibili
+- "posso togliere i guanti?" durante attività che li richiede
+  -> messaggio di blocco motivato
+- Stesso comando durante attività che NON richiede i guanti
+  -> messaggio che conferma la possibilità di toglierli
+
+
+9. TUTTE LE ATTIVITA' DISPONIBILI (panoramica)
+----------------------------------------------------
+Face Model:
+  - pesatura reagenti (mascherina)
+  - lettura pH (occhiali)
+  - preparazione tamponi (occhiali, mascherina)
+  - campionamento (occhiali, mascherina)
+
+Full-Body Model:
+  - miscelazione acidi (occhiali, guanti, camice, mascherina)
+  - uso fiamme (occhiali, guanti, camice)
+  - uso solventi (occhiali, guanti, mascherina)
+  - titolazione (occhiali, guanti)
+  - sterilizzazione (guanti, camice)
+  - pipettaggio (guanti)
+  - briefing (camice)
+
+
+10. STORICO E STATISTICHE
+-----------------------------
+- Aprire il pannello "Storico" (in alto a destra)
+- Tab "Accessi": mostrare lista sessioni con operatore, attività, esito,
+  possibilità di eliminare una sessione
+- Tab "Statistiche": mostrare
+  - donut conformità (% conformi/violazioni)
+  - barre DPI più dimenticati
+  - bolle attività più frequenti
+  - grafico sessioni ultimi 7 giorni
+
+
+11. RICONOSCIMENTO VOCALE E SINTESI VOCALE
+------------------------------------------------
+- Usare il pulsante microfono per dettare un comando a voce
+- Mostrare la lettura automatica delle risposte del bot (speaker on/off)

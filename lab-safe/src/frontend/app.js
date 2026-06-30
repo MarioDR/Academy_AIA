@@ -1,6 +1,6 @@
 /**
  * @file app.js
- * @description Logica frontend. Gestisce UI, integrazione Teachable Machine e Dialogflow.
+ * @description Logica frontend. Gestisce UI, login, integrazione Teachable Machine e Dialogflow.
  */
 
 var DPI_RICHIESTI = {
@@ -31,6 +31,34 @@ var RISCHIO_LABEL = {
   briefing_laboratorio: 'Basso · briefing laboratorio',
 };
 
+var DPI_FRASE_NON_RICHIESTO = {
+  guanti: 'I guanti non sono richiesti per questa attività, puoi toglierli se necessario.',
+  mascherina: 'La mascherina non è richiesta per questa attività, puoi toglierla se necessario.',
+  occhiali: 'Gli occhiali non sono richiesti per questa attività, puoi toglierli se necessario.',
+  camice: 'Il camice non è richiesto per questa attività, puoi toglierlo se necessario.',
+};
+
+var DPI_FRASE_RICHIESTO = {
+  guanti: 'Non rimuovere i guanti durante l\'esperimento, sono richiesti per questa attività.',
+  mascherina: 'Non rimuovere la mascherina durante l\'esperimento, è richiesta per questa attività.',
+  occhiali: 'Non rimuovere gli occhiali durante l\'esperimento, sono richiesti per questa attività.',
+  camice: 'Non rimuovere il camice durante l\'esperimento, è richiesto per questa attività.',
+};
+
+var FASI_ATTIVITA = {
+  pesatura_reagenti:    ['Tara la bilancia.', 'Pesa il reagente e registra il peso.'],
+  lettura_pH:           ['Calibra il pH-metro.', 'Immergi l\'elettrodo nel campione e leggi il valore.'],
+  preparazione_tamponi: ['Dissolvi i componenti in acqua distillata.', 'Aggiusta il pH.', 'Porta a volume finale con matraccio.'],
+  campionamento:        ['Etichetta il contenitore.', 'Preleva il campione con la siringa sterile.', 'Conserva alla temperatura indicata.'],
+  miscelazione_acidi:   ['Versa lentamente l\'acido nell\'acqua sotto cappa.', 'Mescola con cautela.', 'Verifica concentrazione finale.'],
+  uso_fiamme:           ['Accendi il bunsen e regola la fiamma blu.', 'Riscalda il campione con movimento circolare.', 'Spegni e lascia raffreddare su reticella.'],
+  uso_solventi:         ['Attiva la cappa aspirante.', 'Preleva il solvente in piccole quantità.', 'Chiudi immediatamente i contenitori.'],
+  titolazione:          ['Riempi la buretta con la soluzione titolante.', 'Aggiungi goccia a goccia fino al viraggio.', 'Registra il volume utilizzato.'],
+  sterilizzazione:      ['Posiziona il materiale in autoclave.', 'Imposta ciclo 121°C per 20 minuti.'],
+  pipettaggio:          ['Calibra la micropipetta sul volume desiderato.', 'Aspira e trasferisci il liquido nel contenitore.'],
+  briefing_laboratorio: ['Prendi nota delle istruzioni operative ricevute.', 'Conferma la presa visione al responsabile di laboratorio.'],
+};
+
 var classificaInCorso = false;
 var tmModel = null;
 var tmModelFB = null;
@@ -39,6 +67,8 @@ var tmModelURL = '/models/face/';
 var sessioneSalvata = false;
 var speechOutputEnabled = true;
 var operatoreCorrente = 'Operatore';
+var ruoloCorrente = null;
+var salutoCorrente = 'Operatore';
 var currentTheme    = 'light';
 var streamActive    = false;
 var currentActivity = null;
@@ -46,6 +76,11 @@ var dpiState        = { occhiali: null, guanti: null, mascherina: null, camice: 
 var statoStabile = { occhiali: null, mascherina: null };
 var contatoreStabile = { occhiali: 0, mascherina: 0 };
 var SOGLIA_STABILITA = 3;
+var faseCorrente = 0;
+var fasiAttive = false;
+var attesaCambioAttivita = false;
+var attesaFineAttivita = false;
+var esperimentoCompletato = false;
 
 function updateClock() {
   var now = new Date();
@@ -68,6 +103,9 @@ function switchTab(tab) {
     document.getElementById('tabWebcam').classList.add('active');
     document.getElementById('tabUpload').classList.remove('active');
     document.getElementById('streamBadge').textContent = 'Webcam live';
+    var uploadPreview = document.getElementById('uploadPreview');
+    if (uploadPreview) { uploadPreview.removeAttribute('src'); uploadPreview.style.display = 'none'; }
+    document.getElementById('fileInput').value = '';
   } else {
     document.getElementById('uploadArea').style.display = '';
     document.getElementById('webcamArea').style.display = 'none';
@@ -75,18 +113,10 @@ function switchTab(tab) {
     document.getElementById('tabWebcam').classList.remove('active');
     document.getElementById('streamBadge').textContent = 'Upload';
     stopWebcam();
-    var roiOverlay = document.getElementById('roiOverlay');
-    if (roiOverlay) roiOverlay.style.display = 'none';
-    var classOverlay = document.getElementById('classOverlay');
-    if (classOverlay) classOverlay.style.display = 'none';
-    var bodyRoiOverlay = document.getElementById('bodyRoiOverlay');
-    if (bodyRoiOverlay) bodyRoiOverlay.style.display = 'none';
+    nascondiTuttiGliOverlay();
   }
 }
 
-/**
- * Avvia il feed della webcam locale.
- */
 function startWebcam() {
   navigator.mediaDevices.getUserMedia({ video: true })
     .then(function(stream) {
@@ -103,8 +133,8 @@ function startWebcam() {
       if (currentActivity) {
         setTimeout(function() { classificaConTM(); }, 1200);
       } else {
-      addMessage('bot', 'Stream avviato. Quale attività vuoi svolgere?');
-    }
+        addMessage('bot', 'Stream avviato. Quale attività vuoi svolgere?');
+      }
     })
     .catch(function() {
       addMessage('bot', 'Impossibile accedere alla webcam. Controlla i permessi del browser.');
@@ -127,9 +157,6 @@ function stopWebcam() {
   document.getElementById('streamVal').style.color = '#ff3b30';
 }
 
-/**
- * Gestisce il caricamento manuale di un'immagine.
- */
 function handleUpload(event) {
   var file = event.target.files[0];
   if (!file) return;
@@ -177,6 +204,7 @@ var analisiAvviata = false;
 function checkCompliance() {
   if (!currentActivity) return;
   if (!analisiAvviata) return;
+  if (esperimentoCompletato) return;
   var richiesti = DPI_RICHIESTI[currentActivity] || [];
   var mancanti = richiesti.filter(function(d) { return dpiState[d] !== true; });
   var badge     = document.getElementById('dpiBadge');
@@ -191,22 +219,52 @@ function checkCompliance() {
     addMessage('success', '✓ DPI verificati. Puoi procedere in sicurezza.');
     salvaSessione('conforme');
     sessioneSalvata = true;
+    if (!fasiAttive && !attesaFineAttivita && !esperimentoCompletato) {
+      setTimeout(function() { avviaFasi(); }, 800);
+    }
   } else {
     badge.textContent = mancanti.length + (mancanti.length > 1 ? ' mancanti' : ' mancante');
     badge.className   = 'panel-badge warn';
     var lista = mancanti.map(function(d) { return d.charAt(0).toUpperCase() + d.slice(1); }).join(', ');
     addMessage('alert', 'DPI mancanti: ' + lista + '. Indossali prima di procedere.');
     if (!sessioneSalvata) { salvaSessione('non conforme'); sessioneSalvata = true; }
+    if (fasiAttive) {
+      addMessage('alert', 'Fasi sospese: reindossa i DPI mancanti per riprendere dalla fase ' + (faseCorrente + 1) + '.');
+    }
   }
 }
 
+function avviaFasi() {
+  var fasi = FASI_ATTIVITA[currentActivity];
+  if (!fasi || fasi.length === 0) return;
+  fasiAttive = true;
+  faseCorrente = 0;
+  addMessage('bot', 'Inizia l\'esperimento. Durante le fasi puoi dire: "avanti" o "fatto" per procedere, "ripeti" per rivedere la fase corrente, "ho finito" quando hai completato tutto. Non rimuovere i DPI richiesti. Fase 1 di ' + fasi.length + ': ' + fasi[0]);
+  aggiornaOverlayFase();
+}
+
+function aggiornaOverlayFase() {
+  var parentArea = getParentArea(streamActive);
+  if (!fasiAttive || !currentActivity) {
+    nascondiFaseOverlay();
+    return;
+  }
+  var fasi = FASI_ATTIVITA[currentActivity] || [];
+  mostraFaseOverlay(parentArea, faseCorrente + 1, fasi.length, fasi[faseCorrente]);
+}
+
 function setDPIIdle() {
-   sessioneSalvata = false;
-   ultimoEsitoCheck = null;
-   analisiAvviata = false;
-   classificaInCorso = false;
-   statoStabile = { occhiali: null, mascherina: null };
-   contatoreStabile = { occhiali: 0, mascherina: 0 };
+  sessioneSalvata = false;
+  ultimoEsitoCheck = null;
+  analisiAvviata = false;
+  classificaInCorso = false;
+  statoStabile = { occhiali: null, mascherina: null };
+  contatoreStabile = { occhiali: 0, mascherina: 0 };
+  fasiAttive = false;
+  faseCorrente = 0;
+  attesaCambioAttivita = false;
+  attesaFineAttivita = false;
+  esperimentoCompletato = false;
   ['occhiali','guanti','mascherina','camice'].forEach(function(k) {
     dpiState[k] = null;
     var item = document.getElementById('dpi-' + k);
@@ -218,11 +276,11 @@ function setDPIIdle() {
   document.getElementById('dpiBadge').textContent = 'in attesa';
   document.getElementById('dpiBadge').className   = 'panel-badge';
   ['occhiali','guanti','mascherina','camice'].forEach(function(k) {
-  var item = document.getElementById('dpi-' + k);
-  if (item) item.classList.remove('dpi-inactive');
-});
-  var overlay = document.getElementById('classOverlay');
-  if (overlay) overlay.style.display = 'none';
+    var item = document.getElementById('dpi-' + k);
+    if (item) item.classList.remove('dpi-inactive');
+  });
+  nascondiClassOverlay();
+  nascondiFaseOverlay();
 }
 
 function setDPIPending(activityKey) {
@@ -237,7 +295,6 @@ function setDPIPending(activityKey) {
 }
 
 function aggiornaDPIVisibility(activityKey) {
-  var richiesti = DPI_RICHIESTI[activityKey] || [];
   ['occhiali', 'guanti', 'mascherina', 'camice'].forEach(function(k) {
     var item = document.getElementById('dpi-' + k);
     if (!item) return;
@@ -312,12 +369,14 @@ function addMessage(type, text) {
   sender.className = 'msg-sender';
   sender.textContent = type === 'user' ? operatoreCorrente : type === 'alert' ? 'Alert' : 'Lab-Safe';
   div.appendChild(sender);
-  div.appendChild(document.createTextNode(text));
+  var testoSpan = document.createElement('span');
+  testoSpan.innerHTML = text.replace(/\n/g, '<br>');
+  div.appendChild(testoSpan);
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
   if (speechOutputEnabled && (type === 'bot' || type === 'success' || type === 'alert')) {
-  leggiRisposta(text);
-}
+    leggiRisposta(text);
+  }
 }
 
 function sendMessage() {
@@ -335,9 +394,6 @@ function sendQuickReply(text) {
   processUserMessage(text);
 }
 
-/**
- * Invia messaggi utente al chatbot Dialogflow.
- */
 function processUserMessage(text) {
   var dpiRilevati = Object.keys(dpiState).filter(function(k) { return dpiState[k] === true; });
   fetch('/api/dialogflow', {
@@ -352,45 +408,150 @@ function processUserMessage(text) {
   })
   .then(function(res) { return res.json(); })
   .then(function(data) {
+
+    if (data.intent === 'Conferma_Cambio') {
+      if (attesaCambioAttivita) {
+        attesaCambioAttivita = false;
+        currentActivity = null;
+        updateRisk(null);
+        setDPIIdle();
+        sessioneSalvata = false;
+        document.getElementById('quickReplies').style.display = '';
+        addMessage('bot', 'Attività resettata. Quale attività vuoi svolgere?');
+        if (streamActive) avviaLoopTM();
+      }
+      return;
+    }
+
+    if (data.intent === 'Annulla_Cambio') {
+      if (attesaCambioAttivita) {
+        attesaCambioAttivita = false;
+        if (streamActive) avviaLoopTM();
+        var fasi = FASI_ATTIVITA[currentActivity] || [];
+        addMessage('bot', 'Ok, continuiamo. Fase ' + (faseCorrente + 1) + ' di ' + fasi.length + ': ' + fasi[faseCorrente]);
+      }
+      return;
+    }
+
+    if (data.intent === 'Avanza_Fase') {
+      if (!fasiAttive || !analisiAvviata) {
+        addMessage('bot', 'Nessun esperimento in corso con DPI verificati. Dichiara prima un\'attività e verifica i DPI.');
+      } else {
+        var fasi = FASI_ATTIVITA[currentActivity] || [];
+        if (faseCorrente < fasi.length - 1) {
+          faseCorrente++;
+          addMessage('bot', 'Fase ' + (faseCorrente + 1) + ' di ' + fasi.length + ': ' + fasi[faseCorrente]);
+          aggiornaOverlayFase();
+        } else if (!attesaFineAttivita) {
+          attesaFineAttivita = true;
+          addMessage('bot', 'Hai completato tutte le fasi. Quando hai finito di sistemare dì "ho finito".');
+          aggiornaOverlayFase();
+        } else {
+          addMessage('bot', 'Hai già completato tutte le fasi. Dì "ho finito" per concludere.');
+        }
+      }
+      return;
+    }
+
+    if (data.intent === 'Ripeti_Fase') {
+      if (!fasiAttive) {
+        addMessage('bot', 'Nessun esperimento in corso.');
+      } else {
+        var fasi = FASI_ATTIVITA[currentActivity] || [];
+        addMessage('bot', 'Fase ' + (faseCorrente + 1) + ' di ' + fasi.length + ': ' + fasi[faseCorrente]);
+      }
+      return;
+    }
+
+    if (data.intent === 'Fine_Attivita') {
+      var fasi = FASI_ATTIVITA[currentActivity] || [];
+      if (!fasiAttive && !attesaFineAttivita) {
+        addMessage('bot', 'Nessun esperimento in corso.');
+      } else if (attesaFineAttivita || faseCorrente === fasi.length - 1) {
+        var richiesti = DPI_RICHIESTI[currentActivity] || [];
+        addMessage('success', '✓ Esperimento completato. DPI indossati: ' + richiesti.join(', ') + '. Ricorda di smaltire correttamente i rifiuti e riporre i DPI.');
+        fasiAttive = false;
+        attesaFineAttivita = false;
+        esperimentoCompletato = true;
+        var faseOverlay = document.getElementById('faseOverlay');
+        if (faseOverlay) faseOverlay.style.display = 'none';
+        salvaSessione('conforme');
+      } else {
+        addMessage('bot', 'Non hai ancora completato tutte le fasi.');
+      }
+      return;
+    }
+
+    if (data.intent === 'Rimuovi_DPI') {
+      var richiesti = DPI_RICHIESTI[currentActivity] || [];
+      var dpiMenzionato = null;
+      if (/guant/.test(text)) dpiMenzionato = 'guanti';
+      else if (/mascherin/.test(text)) dpiMenzionato = 'mascherina';
+      else if (/occhial/.test(text)) dpiMenzionato = 'occhiali';
+      else if (/camice/.test(text)) dpiMenzionato = 'camice';
+
+      if (dpiMenzionato && richiesti.indexOf(dpiMenzionato) === -1) {
+        addMessage('bot', DPI_FRASE_NON_RICHIESTO[dpiMenzionato]);
+      } else if (dpiMenzionato) {
+        addMessage('alert', DPI_FRASE_RICHIESTO[dpiMenzionato]);
+      } else {
+        addMessage('alert', 'Non rimuovere i DPI richiesti durante l\'esperimento. Sono necessari per la tua sicurezza.');
+      }
+      return;
+    }
+
+    if (data.intent === 'Emergenza') {
+      addMessage('alert', 'EMERGENZA: Allontanati immediatamente dall\'area e avvisa il responsabile di laboratorio. Consulta la scheda di sicurezza (SDS) della sostanza coinvolta e segui il protocollo di emergenza specifico. Non agire senza istruzioni certe.');
+      return;
+    }
+
+    if (data.intent === 'Cambio_Attivita') {
+      if (fasiAttive) {
+        attesaCambioAttivita = true;
+        fermaLoopTM();
+        addMessage('bot', 'Sei sicuro di voler cambiare attività? La sessione corrente verrà resettata. Rispondi "confermo" o "annulla".');
+        return;
+      }
+      currentActivity = null;
+      updateRisk(null);
+      setDPIIdle();
+      sessioneSalvata = false;
+      fermaLoopTM();
+      document.getElementById('quickReplies').style.display = '';
+      return;
+    }
+
     if (data.attivita && data.attivita !== currentActivity) {
       currentActivity = data.attivita;
       updateRisk(currentActivity);
       setDPIIdle();
       aggiornaDPIVisibility(currentActivity);
-    if (streamActive) {
-      setTimeout(function() { classificaConTM(); }, 1200);
-    } else if (document.getElementById('uploadPreview').style.display !== 'none') {
-      setTimeout(function() { classificaConTM(); }, 1200);
-    } else {
-      setDPIPending(currentActivity);
-      addMessage('bot', 'Attività registrata. Avvia la webcam o carica un\'immagine per analizzare i DPI.');
+      if (streamActive) {
+        setTimeout(function() { classificaConTM(); }, 1200);
+      } else if (document.getElementById('uploadPreview').style.display !== 'none') {
+        setTimeout(function() { classificaConTM(); }, 1200);
+      } else {
+        setDPIPending(currentActivity);
+        addMessage('bot', 'Attività registrata. Avvia la webcam o carica un\'immagine per analizzare i DPI.');
+      }
     }
-}
 
-   if (data.reply) {
-  var tipo = 'bot';
-  var testo = data.reply;
-  if (data.intent === 'Default Fallback Intent') {
-    tipo = 'alert';
-  }
-  if (data.intent === 'Default Welcome Intent') {
-    testo = 'Salve ' + operatoreCorrente + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?';
-  }
-  if (data.intent !== 'Inizio_Attivita') {
-    addMessage(tipo, testo);
-  }
-  if (data.intent === 'Cambio_Attivita') {
-    currentActivity = null;
-    updateRisk(null);
-    setDPIIdle();
-    sessioneSalvata = false;
-    fermaLoopTM();
-    document.getElementById('quickReplies').style.display = '';
-  }
-}
+    if (data.reply) {
+      var tipo = 'bot';
+      var testo = data.reply;
+      if (data.intent === 'Default Fallback Intent') {
+        tipo = 'alert';
+      }
+      if (data.intent === 'Default Welcome Intent') {
+        testo = 'Salve ' + salutoCorrente + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?';
+      }
+      if (data.intent !== 'Inizio_Attivita') {
+        addMessage(tipo, testo);
+      }
+    }
 
     if (!data.attivita && !currentActivity && (!data.intent || data.intent === 'Default Fallback Intent')) {
-      addMessage('bot', 'Attività non riconosciuta. Prova con: pesatura reagenti, lettura pH, preparazione tamponi, campionamento, miscelazione acidi, uso fiamme, uso solventi o titolazione.');
+      addMessage('bot', 'Attività non riconosciuta. Prova con: pesatura reagenti, lettura pH, preparazione tamponi, campionamento, miscelazione acidi, uso fiamme, uso solventi, titolazione, sterilizzazione, pipettaggio o briefing.');
     }
   })
   .catch(function() {
@@ -418,9 +579,6 @@ async function caricaModelloFB() {
   }
 }
 
-/**
- * Loop principale di inferenza: estrae frame, ottiene la ROI e la classifica tramite TM.
- */
 async function classificaConTM() {
   if (!tmModel) return;
   if (!currentActivity) return;
@@ -462,73 +620,25 @@ async function classificaConTM() {
 
     if (data.status !== 'ok' || !data.face_rois || data.face_rois.length === 0) {
       console.warn('[TM] Nessun volto rilevato da YOLOv8 o errore:', data.message);
-      var oldOverlay = document.getElementById('roiOverlay');
-      if (oldOverlay) oldOverlay.style.display = 'none';
+      nascondiRoiOverlay();
       classificaInCorso = false;
       return;
     }
-    var roiOverlay = document.getElementById('roiOverlay');
-    if (!roiOverlay) {
-      roiOverlay = document.createElement('div');
-      roiOverlay.id = 'roiOverlay';
-      roiOverlay.style.cssText = 'position:absolute; bottom:16px; right:16px; width:76px; height:76px; border:2px solid #34c759; border-radius:10px; overflow:hidden; z-index:10; box-shadow: 0 4px 12px rgba(0,0,0,0.3); background:#000;';
-      roiOverlay.innerHTML = '<img id="roiImageDisplay" style="width:100%; height:100%; object-fit:cover;" /><div style="position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.7); color:white; font-size:9px; text-align:center; padding:3px 0; font-weight:600; letter-spacing:0.05em;">FACE ROI</div>';
+    var parentArea = getParentArea(isVideo);
+    if (parentArea) parentArea.style.position = 'relative';
+
+    mostraRoiOverlay(parentArea, data.face_rois[0]);
+
+    if (data.body_rois && data.body_rois.length > 0) {
+      mostraBodyRoiOverlay(parentArea, data.body_rois[0]);
+    } else {
+      nascondiBodyRoiOverlay();
     }
-    var parentArea = isVideo ? document.getElementById('webcamArea') : document.getElementById('uploadArea');
-    if (parentArea) {
-      parentArea.style.position = 'relative';
-      if (roiOverlay.parentNode !== parentArea) parentArea.appendChild(roiOverlay);
-    }
-    
-    roiOverlay.style.display = 'block';
-  if (data.body_rois && data.body_rois.length > 0) {
-  var bodyOverlay = document.getElementById('bodyRoiOverlay');
-  if (!bodyOverlay) {
-    bodyOverlay = document.createElement('div');
-    bodyOverlay.id = 'bodyRoiOverlay';
-    bodyOverlay.style.cssText = 'position:absolute; bottom:16px; left:16px; width:76px; height:76px; border:2px solid #ff9500; border-radius:10px; overflow:hidden; z-index:10; box-shadow: 0 4px 12px rgba(0,0,0,0.3); background:#000;';
-    bodyOverlay.innerHTML = '<img id="bodyRoiImageDisplay" style="width:100%; height:100%; object-fit:cover;" /><div style="position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.7); color:white; font-size:9px; text-align:center; padding:3px 0; font-weight:600; letter-spacing:0.05em;">FULL-BODY ROI</div>';
-  }
-  if (bodyOverlay.parentNode !== parentArea) parentArea.appendChild(bodyOverlay);
-  bodyOverlay.style.display = 'block';
-  document.getElementById('bodyRoiImageDisplay').src = data.body_rois[0];
-} else {
-  var bodyOverlay = document.getElementById('bodyRoiOverlay');
-  if (bodyOverlay) bodyOverlay.style.display = 'none';
-}
-    document.getElementById('roiImageDisplay').src = data.face_rois[0];
+
     var roiImg = new Image();
     roiImg.onload = async function() {
       var predictions = await tmModel.predict(roiImg);
-      // Overlay classificazione
-      var overlay = document.getElementById('classOverlay');
-      if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.id = 'classOverlay';
-      overlay.style.cssText = 'position:absolute; top:8px; right:8px; background:rgba(0,122,255,0.75); border-radius:8px; padding:8px 10px; width:148px; z-index:10;';
-      overlay.innerHTML = '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;"><i class="ti ti-shield-check" style="font-size:13px;color:#ffffff;"></i><div><div style="font-size:9px;font-weight:500;color:#ffffff;letter-spacing:0.03em;">Classificazione</div><div style="font-size:8px;color:rgba(255,255,255,0.7);">Face Model</div></div></div><div id="classOverlayBars"></div>';
-      parentArea.appendChild(overlay);
-      }else {
-        if (overlay.parentNode !== parentArea) {
-          parentArea.appendChild(overlay);
-        }
-      }
-
-var classi = predictions.slice().sort(function(a,b){ return b.probability - a.probability; });
-var barsHtml = classi.map(function(p) {
-  var pct = Math.round(p.probability * 100);
-  var isTop = p === classi[0];
-  var barColor = isTop ? '#30d158' : '#636366';
-  var valColor = isTop ? '#30d158' : '#aeaeb2';
-  return '<div style="margin-bottom:4px;">' +
-    '<div style="display:flex;justify-content:space-between;margin-bottom:2px;">' +
-    '<span style="font-size:10px;color:#e0e0e0;">' + p.className + '</span>' +
-    '<span style="font-size:10px;font-weight:500;color:' + valColor + ';">' + pct + '%</span></div>' +
-    '<div style="height:2px;border-radius:2px;background:rgba(255,255,255,0.12);">' +
-    '<div style="width:' + pct + '%;height:100%;background:' + barColor + ';border-radius:2px;"></div></div></div>';
-}).join('');
-document.getElementById('classOverlayBars').innerHTML = barsHtml;
-overlay.style.display = 'block';
+      mostraClassOverlay(parentArea, predictions);
 
       var occhiali   = false;
       var mascherina = false;
@@ -537,9 +647,9 @@ overlay.style.display = 'block';
       predictions.forEach(function(p) {
         if (p.probability > maxConf) maxConf = p.probability;
         var cls = p.className.toLowerCase();
-        if (cls === 'occhiali'   && p.probability > 0.75) occhiali   = true;
-        if (cls === 'mascherina' && p.probability > 0.75) mascherina = true;
-        if (cls === 'entrambi'   && p.probability > 0.75) { occhiali = true; mascherina = true; }
+        if (cls === 'occhiali'   && p.probability > 0.6) occhiali   = true;
+        if (cls === 'mascherina' && p.probability > 0.6) mascherina = true;
+        if (cls === 'entrambi'   && p.probability > 0.6) { occhiali = true; mascherina = true; }
       });
 
       var richiesti = DPI_RICHIESTI[currentActivity] || [];
@@ -547,9 +657,7 @@ overlay.style.display = 'block';
       ['occhiali', 'mascherina'].forEach(function(dpi) {
         if (richiesti.indexOf(dpi) === -1) return;
         var nuovoStato = dpi === 'occhiali' ? occhiali : mascherina;
-        
         var sogliaAttuale = isVideo ? SOGLIA_STABILITA : 1;
-
         if (nuovoStato === statoStabile[dpi]) {
           contatoreStabile[dpi] = 0;
         } else {
@@ -570,52 +678,23 @@ overlay.style.display = 'block';
           var camice = false;
           predFB.forEach(function(p) {
             var cls = p.className.toLowerCase();
-            if (cls === 'guanti'   && p.probability > 0.75) guanti = true;
-            if (cls === 'camice'   && p.probability > 0.75) camice = true;
-            if (cls === 'entrambi' && p.probability > 0.75) { guanti = true; camice = true; }
+            if (cls === 'guanti'   && p.probability > 0.6) guanti = true;
+            if (cls === 'camice'   && p.probability > 0.6) camice = true;
+            if (cls === 'entrambi' && p.probability > 0.6) { guanti = true; camice = true; }
           });
+          
+          mostraClassOverlayFB(parentArea, predFB);
+
           var richiesti = DPI_RICHIESTI[currentActivity] || [];
           if (richiesti.indexOf('guanti') !== -1) updateDPI('guanti', guanti, true);
           if (richiesti.indexOf('camice') !== -1) updateDPI('camice', camice, true);
-          
-          // Overlay classificazione Full-Body
-          var overlayFB = document.getElementById('classOverlayFB');
-          if (!overlayFB) {
-            overlayFB = document.createElement('div');
-            overlayFB.id = 'classOverlayFB';
-            overlayFB.style.cssText = 'position:absolute; top:8px; left:8px; background:rgba(209, 122, 0, 0.75); border-radius:8px; padding:8px 10px; width:148px; z-index:10;';
-            overlayFB.innerHTML = '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;"><i class="ti ti-shield-check" style="font-size:13px;color:#ffffff;"></i><div><div style="font-size:9px;font-weight:500;color:#ffffff;letter-spacing:0.03em;">Classificazione</div><div style="font-size:8px;color:rgba(255,255,255,0.7);">Full-Body Model</div></div></div><div id="classOverlayBarsFB"></div>';
-            parentArea.appendChild(overlayFB);
-          } else {
-            if (overlayFB.parentNode !== parentArea) {
-              parentArea.appendChild(overlayFB);
-            }
-          }
-
-          var classiFB = predFB.slice().sort(function(a,b){ return b.probability - a.probability; });
-          var barsHtmlFB = classiFB.map(function(p) {
-            var pct = Math.round(p.probability * 100);
-            var isTop = p === classiFB[0];
-            var barColor = isTop ? '#30d158' : 'rgba(98, 98, 98, 0.4)';
-            var valColor = isTop ? '#30d158' : '#aeaeb2';
-            return '<div style="margin-bottom:4px;">' +
-              '<div style="display:flex;justify-content:space-between;margin-bottom:2px;">' +
-              '<span style="font-size:10px;color:#e0e0e0;">' + p.className + '</span>' +
-              '<span style="font-size:10px;font-weight:500;color:' + valColor + ';">' + pct + '%</span></div>' +
-              '<div style="height:2px;border-radius:2px;background:rgba(255,255,255,0.12);">' +
-              '<div style="width:' + pct + '%;height:100%;background:' + barColor + ';border-radius:2px;"></div></div></div>';
-          }).join('');
-          document.getElementById('classOverlayBarsFB').innerHTML = barsHtmlFB;
-          overlayFB.style.display = 'block';
-
           analisiAvviata = true;
           checkCompliance();
           classificaInCorso = false;
         };
         bodyImg.src = data.body_rois[0];
       } else {
-        var overlayFB = document.getElementById('classOverlayFB');
-        if (overlayFB) overlayFB.style.display = 'none';
+        nascondiClassOverlayFB();
         updateDPI('guanti', null, true);
         updateDPI('camice', null, true);
         analisiAvviata = true;
@@ -645,169 +724,6 @@ function avviaLoopTM() {
 
 function fermaLoopTM() {
   if (tmInterval) { clearInterval(tmInterval); tmInterval = null; }
-}
-
-function apriStorico() {
-  document.getElementById('modalOverlay').classList.add('open');
-  caricaStorico();
-}
-
-function chiudiStorico() {
-  document.getElementById('modalOverlay').classList.remove('open');
-}
-
-function switchModalTab(tab) {
-  var accessi      = document.getElementById('contentAccessi');
-  var statistiche  = document.getElementById('contentStatistiche');
-  var tabA         = document.getElementById('tabAccessi');
-  var tabS         = document.getElementById('tabStatistiche');
-  if (tab === 'accessi') {
-    accessi.style.display     = '';
-    statistiche.style.display = 'none';
-    tabA.classList.add('active');
-    tabS.classList.remove('active');
-  } else {
-    accessi.style.display     = 'none';
-    statistiche.style.display = '';
-    tabS.classList.add('active');
-    tabA.classList.remove('active');
-    disegnaStatistiche();
-  }
-}
-
-function caricaStorico() {
-  fetch('/api/sessioni')
-    .then(function(r) { return r.json(); })
-    .then(function(rows) {
-      var list = document.getElementById('logList');
-      list.innerHTML = '';
-      if (rows.length === 0) {
-        list.innerHTML = '<p style="font-size:12px;color:#8e8e93;text-align:center;padding:16px">Nessuna sessione registrata</p>';
-        return;
-      }
-      rows.forEach(function(row) {
-        var initials = row.operatore.split(' ').filter(function(w) { return w.length > 0; }).map(function(w) { return w[0]; }).join('').toUpperCase();
-        var isOk     = row.esito === 'conforme';
-        var orario   = new Date(row.fine).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-        var attivita = (row.attivita || '').replace(/_/g, ' ');
-        var mancanti = JSON.parse(row.dpi_mancanti || '[]');
-        var dettaglio = isOk ? attivita : attivita + (mancanti.length ? ' · DPI mancanti: ' + mancanti.join(', ') : '');
-        var item = document.createElement('div');
-        item.className = 'log-item';
-        item.innerHTML =
-          item.innerHTML =
-            '<div class="log-avatar">' + initials + '</div>' +
-            '<div><div class="log-name">' + row.operatore + '</div><div class="log-detail">' + dettaglio + '</div></div>' +
-            '<span class="log-badge ' + (isOk ? 'ok' : 'warn') + '">' + (isOk ? 'Conforme' : 'Violazione') + '</span>' +
-            '<span class="log-time">' + orario + '</span>' +
-            '<button class="log-delete" data-id="' + row.id + '"><i class="ti ti-trash"></i></button>';
-        list.appendChild(item);
-        item.querySelector('.log-delete').addEventListener('click', function() {
-        var id = this.getAttribute('data-id');
-        fetch('/api/sessioni/' + id, { method: 'DELETE' })
-        .then(function() { caricaStorico(); });
-        });
-      });
-    });
-
-  fetch('/api/statistiche')
-    .then(function(r) { return r.json(); })
-    .then(function(s) {
-      document.getElementById('statTotale').textContent    = s.totale;
-      document.getElementById('statConformi').textContent  = s.conformi;
-      document.getElementById('statViolazioni').textContent = s.violazioni;
-      disegnaLinea(s.ultimi7);
-    });
-}
-
-function disegnaLinea(dati) {
-  var svg  = document.getElementById('lineChart');
-  var oggi = new Date();
-  var nomiGiorni = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
-  var giorni = [];
-  var punti  = [];
-  for (var i = 6; i >= 0; i--) {
-    var d   = new Date(oggi); d.setDate(oggi.getDate() - i);
-    giorni.push(nomiGiorni[d.getDay()]);
-    var key = d.toISOString().slice(0, 10);
-    var row = dati.find(function(r) { return r.giorno === key; });
-    punti.push(row ? row.n : 0);
-  }
-  var max  = Math.max.apply(null, punti) || 1;
-  var W    = 460; var H = 60; var pad = 5;
-  var coords = punti.map(function(v, i) {
-    return { x: Math.round(i * (W / 6)), y: Math.round(H - pad - (v / max) * (H - pad * 2)) };
-  });
-  var isDark  = document.body.classList.contains('dark');
-  var lineCol = isDark ? '#0a84ff' : '#007aff';
-  var textCol = isDark ? '#636366' : '#8e8e93';
-  var pathD   = coords.map(function(c, i) { return (i === 0 ? 'M' : 'L') + c.x + ',' + c.y; }).join(' ');
-  var areaD   = pathD + ' L' + coords[coords.length-1].x + ',70 L0,70 Z';
-  svg.innerHTML =
-    '<defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="' + lineCol + '" stop-opacity="0.15"/><stop offset="100%" stop-color="' + lineCol + '" stop-opacity="0"/></linearGradient></defs>' +
-    '<path d="' + areaD + '" fill="url(#lg)"/>' +
-    '<polyline points="' + coords.map(function(c) { return c.x + ',' + c.y; }).join(' ') + '" fill="none" stroke="' + lineCol + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
-    coords.map(function(c) { return '<circle cx="' + c.x + '" cy="' + c.y + '" r="3.5" fill="' + lineCol + '"/>'; }).join('') +
-    giorni.map(function(g, i) {
-      var x = Math.round(i * (W / 6));
-      return '<text x="' + x + '" y="78" text-anchor="middle" font-size="9" fill="' + textCol + '">' + g + '</text>';
-    }).join('');
-}
-
-function disegnaStatistiche() {
-  fetch('/api/statistiche')
-    .then(function(r) { return r.json(); })
-    .then(function(s) {
-      var isDark  = document.body.classList.contains('dark');
-      var bgCirc  = isDark ? '#2c2c2e' : '#f2f2f7';
-
-      // Donut
-      var tot  = s.totale || 1;
-      var perc = Math.round((s.conformi / tot) * 100);
-      var circ = 2 * Math.PI * 28;
-      var okArc = (s.conformi / tot) * circ;
-      var svg  = document.getElementById('donutChart');
-      svg.innerHTML =
-        '<circle cx="40" cy="40" r="28" fill="none" stroke="' + bgCirc + '" stroke-width="11"/>' +
-        '<circle cx="40" cy="40" r="28" fill="none" stroke="#34c759" stroke-width="11" stroke-dasharray="' + okArc.toFixed(1) + ' ' + (circ - okArc).toFixed(1) + '" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 40 40)"/>' +
-        '<circle cx="40" cy="40" r="28" fill="none" stroke="#ff3b30" stroke-width="11" stroke-dasharray="' + (circ - okArc).toFixed(1) + ' ' + okArc.toFixed(1) + '" stroke-dashoffset="-' + okArc.toFixed(1) + '" stroke-linecap="round" transform="rotate(-90 40 40)"/>' +
-        '<text x="40" y="36" text-anchor="middle" font-size="13" font-weight="500" fill="' + (isDark ? '#f2f2f7' : '#1c1c1e') + '">' + perc + '%</text>' +
-        '<text x="40" y="49" text-anchor="middle" font-size="7" fill="' + (isDark ? '#636366' : '#8e8e93') + '">conformi</text>';
-
-      var legend = document.getElementById('donutLegend');
-      legend.innerHTML =
-        '<div class="donut-legend-item"><div class="donut-dot" style="background:#34c759"></div>OK · ' + s.conformi + '</div>' +
-        '<div class="donut-legend-item"><div class="donut-dot" style="background:#ff3b30"></div>Viol. · ' + s.violazioni + '</div>';
-
-      // Barre DPI
-      var dpiList = document.getElementById('dpiBarList');
-      dpiList.innerHTML = '';
-      var dpi    = s.dpi_mancanti || {};
-      var maxDPI = Math.max.apply(null, Object.values(dpi).concat([1]));
-      ['mascherina','camice','guanti','occhiali'].forEach(function(k) {
-        var n   = dpi[k] || 0;
-        var pct = Math.round((n / maxDPI) * 100);
-        dpiList.innerHTML +=
-          '<div class="dpi-bar-row">' +
-          '<span class="dpi-bar-label">' + k.charAt(0).toUpperCase() + k.slice(1) + '</span>' +
-          '<div class="dpi-bar-track"><div class="dpi-bar-fill" style="width:' + pct + '%"></div></div>' +
-          '<span class="dpi-bar-count">' + n + '</span></div>';
-      });
-
-      // Bolle attività
-      var bubbleWrap = document.getElementById('bubbleWrap');
-      bubbleWrap.innerHTML = '';
-      var colori = ['#007aff','#34c759','#ff9500','#ff3b30'];
-      var maxN   = Math.max.apply(null, s.per_attivita.map(function(r) { return r.n; }).concat([1]));
-      s.per_attivita.slice(0, 4).forEach(function(row, i) {
-        var size = Math.round(28 + (row.n / maxN) * 42);
-        var label = row.attivita.replace(/_/g, ' ').replace(' ', '<br>');
-        bubbleWrap.innerHTML +=
-          '<div class="bubble-col">' +
-          '<div class="bubble" style="width:' + size + 'px;height:' + size + 'px;background:' + colori[i] + '">' + row.n + '</div>' +
-          '<div class="bubble-lbl">' + label + '</div></div>';
-      });
-    });
 }
 
 var recognition = null;
@@ -883,27 +799,27 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
 
-  document.getElementById('operatoreInput').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') document.getElementById('startAppBtn').click();
-  });  
+  document.getElementById('loginPassword').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') document.getElementById('startAppBtn').click();
+  });
 
-document.getElementById('speakerBtn').addEventListener('click', function() {
-  speechOutputEnabled = !speechOutputEnabled;
-  var icon = document.getElementById('speakerIcon');
-  icon.className = speechOutputEnabled ? 'ti ti-volume' : 'ti ti-volume-off';
-  if (!speechOutputEnabled) {
-    window.speechSynthesis.cancel();
-  }
-});
-inizializzaVoce();
-document.getElementById('micBtn').addEventListener('click', toggleMic);  
-document.getElementById('storicoBtn').addEventListener('click', apriStorico);
-document.getElementById('modalClose').addEventListener('click', chiudiStorico);
-document.getElementById('modalOverlay').addEventListener('click', function(e) {
-  if (e.target === this) chiudiStorico();
-});
-document.getElementById('tabAccessi').addEventListener('click', function() { switchModalTab('accessi'); });
-document.getElementById('tabStatistiche').addEventListener('click', function() { switchModalTab('statistiche'); });
+  document.getElementById('speakerBtn').addEventListener('click', function() {
+    speechOutputEnabled = !speechOutputEnabled;
+    var icon = document.getElementById('speakerIcon');
+    icon.className = speechOutputEnabled ? 'ti ti-volume' : 'ti ti-volume-off';
+    if (!speechOutputEnabled) {
+      window.speechSynthesis.cancel();
+    }
+  });
+  inizializzaVoce();
+  document.getElementById('micBtn').addEventListener('click', toggleMic);  
+  document.getElementById('storicoBtn').addEventListener('click', apriStorico);
+  document.getElementById('modalClose').addEventListener('click', chiudiStorico);
+  document.getElementById('modalOverlay').addEventListener('click', function(e) {
+    if (e.target === this) chiudiStorico();
+  });
+  document.getElementById('tabAccessi').addEventListener('click', function() { switchModalTab('accessi'); });
+  document.getElementById('tabStatistiche').addEventListener('click', function() { switchModalTab('statistiche'); });
   document.getElementById('toggleBtn').addEventListener('click', toggleTheme);
   document.getElementById('tabWebcam').addEventListener('click', function() { switchTab('webcam'); });
   document.getElementById('tabUpload').addEventListener('click', function() { switchTab('upload'); });
@@ -926,14 +842,36 @@ document.getElementById('tabStatistiche').addEventListener('click', function() {
   });
 
   document.getElementById('startAppBtn').addEventListener('click', function() {
-    var nome = document.getElementById('operatoreInput').value.trim();
-    if (!nome) {
-      document.getElementById('operatoreInput').style.border = '2px solid #ff453a';
+    var username = document.getElementById('loginUsername').value.trim();
+    var password = document.getElementById('loginPassword').value;
+    var errorBox = document.getElementById('loginError');
+    if (!username || !password) {
+      document.getElementById('loginUsername').style.border = '2px solid #ff453a';
+      document.getElementById('loginPassword').style.border = '2px solid #ff453a';
       return;
     }
-    operatoreCorrente = nome;
-    document.getElementById('welcomeScreen').classList.add('hidden');
-    addMessage('bot', 'Salve ' + nome + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?');
+    fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, password: password })
+    })
+    .then(function(res) { return res.json().then(function(data) { return { status: res.status, data: data }; }); })
+    .then(function(result) {
+      if (result.status !== 200) {
+        errorBox.textContent = result.data.message || 'Accesso non riuscito.';
+        errorBox.style.display = 'block';
+        return;
+      }
+      operatoreCorrente = result.data.operatore;
+      ruoloCorrente = result.data.ruolo;
+      salutoCorrente = result.data.saluto;
+      document.getElementById('welcomeScreen').classList.add('hidden');
+      addMessage('bot', 'Salve ' + salutoCorrente + '! Sono Lab-Safe, il tuo assistente per la sicurezza in laboratorio. Quale attività vuoi svolgere oggi?');
+    })
+    .catch(function() {
+      errorBox.textContent = 'Errore di connessione al server.';
+      errorBox.style.display = 'block';
+    });
   });
   caricaModelloTM();
   caricaModelloFB();

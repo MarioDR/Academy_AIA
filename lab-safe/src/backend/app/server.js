@@ -11,6 +11,7 @@ require('dotenv').config({ path: path.join(__dirname, '../../../config/env.txt')
 
 const express  = require('express');
 const Database = require('better-sqlite3');
+const crypto   = require('crypto');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -43,6 +44,17 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS utenti (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome     TEXT,
+    cognome  TEXT,
+    ruolo    TEXT,
+    username TEXT UNIQUE,
+    password TEXT
+  )
+`);
+
 var count = db.prepare('SELECT COUNT(*) as n FROM attivita_dpi').get();
 if (count.n === 0) {
   var insert = db.prepare('INSERT INTO attivita_dpi (attivita, dpi, rischio) VALUES (?, ?, ?)');
@@ -59,10 +71,70 @@ if (count.n === 0) {
   insert.run('briefing_laboratorio', JSON.stringify(['camice']),           'Basso');
 }
 
+function hashPassword(plain) {
+  return crypto.createHash('sha256').update(plain).digest('hex');
+}
+
+var countUtenti = db.prepare('SELECT COUNT(*) as n FROM utenti').get();
+if (countUtenti.n === 0) {
+  var insertUtente = db.prepare('INSERT INTO utenti (nome, cognome, ruolo, username, password) VALUES (?, ?, ?, ?, ?)');
+  insertUtente.run('Mario',  'Rossi',   'dottore',      'mrossi',   hashPassword('1234'));
+  insertUtente.run('Giulia', 'Bianchi', 'dottoressa',   'gbianchi', hashPassword('1234'));
+  insertUtente.run('Luca',   'Verdi',   'studente',     'lverdi',   hashPassword('1234'));
+  insertUtente.run('Sara',   'Gialli',  'studentessa',  'sgialli',  hashPassword('1234'));
+}
+
+var RUOLO_SIGLA = {
+  dottore:     'Dr.',
+  dottoressa:  'Dr.ssa',
+  studente:    'Studente',
+  studentessa: 'Studentessa',
+};
+
 app.use(express.json({ limit: '50mb' }));
 
 /**
- * Endpoint: Proxy per l'invio frame al microservizio Python.
+ * Endpoint: Autenticazione utente.
+ */
+app.post('/api/login', function(req, res) {
+  var body     = req.body;
+  var username = (body.username || '').trim();
+  var password = body.password || '';
+
+  if (!username || !password) {
+    return res.status(400).json({ status: 'error', message: 'Username e password richiesti.' });
+  }
+
+  var hashed = hashPassword(password);
+  var utente = db.prepare('SELECT * FROM utenti WHERE username = ? AND password = ?').get(username, hashed);
+
+  if (!utente) {
+    return res.status(401).json({ status: 'error', message: 'Credenziali non valide.' });
+  }
+
+  var sigla = RUOLO_SIGLA[utente.ruolo] || '';
+  var nomeCompleto;
+  var nomeSaluto;
+  if (utente.ruolo === 'dottore' || utente.ruolo === 'dottoressa') {
+    nomeCompleto = sigla + ' ' + utente.cognome;
+    nomeSaluto   = sigla + ' ' + utente.cognome;
+  } else {
+    nomeCompleto = utente.nome;
+    nomeSaluto   = utente.nome;
+  }
+
+  res.json({
+    status: 'ok',
+    operatore: nomeCompleto,
+    saluto: nomeSaluto,
+    nome: utente.nome,
+    cognome: utente.cognome,
+    ruolo: utente.ruolo
+  });
+});
+
+/**
+ * Endpoint: Proxy per l'invio frame a detector.py.
  */
 app.post('/api/process-frame', async function(req, res) {
   try {
@@ -226,7 +298,7 @@ const { spawn } = require('child_process');
 const pythonProcess = spawn('python', [path.join(__dirname, '../vision/detector.py'), '--mode', 'server']);
 
 pythonProcess.stdout.on('data', (data) => console.log(`[YOLOv8]: ${data.toString().trim()}`));
-pythonProcess.stderr.on('data', (data) => console.error(`[YOLOv8 Error]: ${data.toString().trim()}`));
+pythonProcess.stderr.on('data', (data) => console.log(`[YOLOv8 Log]: ${data.toString().trim()}`));
 pythonProcess.on('close', (code) => console.log(`[YOLOv8] Server terminato con codice ${code}`));
 
 process.on('exit', () => pythonProcess.kill());

@@ -1,3 +1,7 @@
+<!--
+  @file index.html
+  @description Markup principale dell'applicazione Lab-Safe.
+-->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -47,21 +51,28 @@
       <div class="welcome-step">
         <div class="welcome-num">4</div>
         <div>
-          <div class="welcome-step-title">Attendi la conferma e procedi</div>
-          <div class="welcome-step-desc">Lab-Safe ti darà il via libera quando sei in sicurezza</div>
+          <div class="welcome-step-title">Segui le fasi guidate</div>
+          <div class="welcome-step-desc">Lab-Safe ti accompagnerà passo passo nell'esperimento</div>
         </div>
       </div>
     </div>
     <div class="welcome-badge">GRUPPO 11 · AIA 2025/2026</div>
-    <div style="width:100%;max-width:380px;margin-bottom:16px;">
+    <div style="width:100%;max-width:380px;margin-bottom:10px;">
       <input
         type="text"
-        id="operatoreInput"
-        placeholder="Il tuo nome..."
-        style="width:100%;padding:12px 16px;border-radius:12px;font-size:15px;font-family:inherit;outline:none;"
+        id="loginUsername"
+        placeholder="Username"
+        class="login-input"
       />
+      <input
+        type="password"
+        id="loginPassword"
+        placeholder="Password"
+        class="login-input"
+      />
+      <div id="loginError" style="display:none;color:#ff3b30;font-size:12px;margin-top:8px;text-align:center;"></div>
     </div>
-    <button class="welcome-start" id="startAppBtn">Inizia</button>
+    <button class="welcome-start" id="startAppBtn">Accedi</button>
   </div>
 
   <div class="root">
@@ -168,6 +179,10 @@
           <div class="panel-header">
             <i class="ti ti-message-chatbot ph-icon"></i>
             <span class="panel-title">Assistente Lab-Safe</span>
+            <span class="help-icon-wrap">
+              <i class="ti ti-help-circle" id="helpIcon"></i>
+              <span class="help-tooltip">Scrivi "info" in chat per vedere l'elenco dei comandi disponibili.</span>
+            </span>
             <span class="panel-badge">Dialogflow</span>
           </div>
           <div class="chat-messages" id="chatMessages"></div>
@@ -246,6 +261,8 @@
   </div>
 </div>
 
+  <script src="overlays.js"></script>
+  <script src="storico.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
