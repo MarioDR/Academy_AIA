@@ -73,8 +73,8 @@ var currentTheme    = 'light';
 var streamActive    = false;
 var currentActivity = null;
 var dpiState        = { occhiali: null, guanti: null, mascherina: null, camice: null };
-var statoStabile = { occhiali: null, mascherina: null };
-var contatoreStabile = { occhiali: 0, mascherina: 0 };
+var statoStabile = { occhiali: null, mascherina: null, guanti: null, camice: null };
+var contatoreStabile = { occhiali: 0, mascherina: 0, guanti: 0, camice: 0 };
 var SOGLIA_STABILITA = 3;
 var faseCorrente = 0;
 var fasiAttive = false;
@@ -258,8 +258,8 @@ function setDPIIdle() {
   ultimoEsitoCheck = null;
   analisiAvviata = false;
   classificaInCorso = false;
-  statoStabile = { occhiali: null, mascherina: null };
-  contatoreStabile = { occhiali: 0, mascherina: 0 };
+  statoStabile = { occhiali: null, mascherina: null, guanti: null, camice: null };
+  contatoreStabile = { occhiali: 0, mascherina: 0, guanti: 0, camice: 0 };
   fasiAttive = false;
   faseCorrente = 0;
   attesaCambioAttivita = false;
@@ -621,6 +621,9 @@ async function classificaConTM() {
     if (data.status !== 'ok' || !data.face_rois || data.face_rois.length === 0) {
       console.warn('[TM] Nessun volto rilevato da YOLOv8 o errore:', data.message);
       nascondiRoiOverlay();
+      nascondiClassOverlay();
+      nascondiBodyRoiOverlay();
+      nascondiClassOverlayFB();
       classificaInCorso = false;
       return;
     }
@@ -686,8 +689,21 @@ async function classificaConTM() {
           mostraClassOverlayFB(parentArea, predFB);
 
           var richiesti = DPI_RICHIESTI[currentActivity] || [];
-          if (richiesti.indexOf('guanti') !== -1) updateDPI('guanti', guanti, true);
-          if (richiesti.indexOf('camice') !== -1) updateDPI('camice', camice, true);
+          ['guanti', 'camice'].forEach(function(dpi) {
+            if (richiesti.indexOf(dpi) === -1) return;
+            var nuovoStato = dpi === 'guanti' ? guanti : camice;
+            var sogliaAttuale = isVideo ? SOGLIA_STABILITA : 1;
+            if (nuovoStato === statoStabile[dpi]) {
+              contatoreStabile[dpi] = 0;
+            } else {
+              contatoreStabile[dpi]++;
+              if (contatoreStabile[dpi] >= sogliaAttuale) {
+                statoStabile[dpi] = nuovoStato;
+                contatoreStabile[dpi] = 0;
+                updateDPI(dpi, nuovoStato, true);
+              }
+            }
+          });
           analisiAvviata = true;
           checkCompliance();
           classificaInCorso = false;
