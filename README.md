@@ -85,6 +85,8 @@ Gli utenti che possono accedere al laboratorio sono predefiniti in un database S
 
 ## Installazione e avvio
 
+> ⚠️ Prima di avviare l'applicazione, leggi la sezione **Configurazione** e completa i 3 punti.
+
 ```bash
 # 1. Caricare la cartella su VSCode
 cd Academy_AIA/lab-safe
