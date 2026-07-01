@@ -104,6 +104,7 @@ REQUISITI
 ================================================================================
 
 INSTALLAZIONE E AVVIO
+-- Attenzione⚠️ Prima di avviare l'applicazione, leggi la sezione CONFIGURAZIONE e completa i 3 punti.
 
   # 1. Caricare la cartella su VSCode
   cd Academy_AIA/lab-safe
