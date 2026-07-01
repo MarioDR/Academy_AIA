@@ -155,35 +155,33 @@ Al primo avvio il database viene popolato automaticamente con utenti di esempio 
 
 ```
 lab-safe/
+├── api/
+│   └── src/
+│       └── server.js          # Server Express + API REST + autenticazione
+├── web/
+│   ├── index.html             # Interfaccia principale
+│   ├── style.css              # Stile
+│   ├── app.js                 # Logica core: login, DPI, Dialogflow
+│   ├── overlays.js            # Gestione overlay ROI e classificazioni
+│   └── storico.js             # Gestione modale storico e statistiche
+├── ai_service/
+│   ├── src/
+│   │   └── detector.py        # Estrazione Face/Body ROI con OpenCV + YOLOv8
+│   └── models/
+│       └── yolov8n-pose.pt    # Modello YOLOv8 Pose
 ├── config/
 │   ├── credentials.json       # Credenziali Google Cloud
 │   └── env.txt                # Variabili d'ambiente
 ├── data/
 │   ├── models/
-│   │   ├── yolov8n-pose.pt    # Modello YOLOv8 Pose
 │   │   └── teachable_machine/
-│   │       ├── face/          # Modello TM — Face (occhiali, mascherina)
-│   │       └── full_body/     # Modello TM — Full Body (guanti, camice)
+│   │       ├── face/          # Modello TM — Face
+│   │       └── full_body/     # Modello TM — Full Body
 │   └── raw/
-│       ├── Face/               # Dataset grezzo volti (per TM)
-│       └── Full-Body/          # Dataset grezzo corpo (per TM)
 ├── database/
-│   └── labsafe.db             # Database SQLite (sessioni, attività, utenti)
+│   └── labsafe.db             # Database SQLite
+├── demo/
 ├── docs/
-│   ├── AIA_G11_PropostaProgettuale.pdf
-│   └── AIA_Gruppo11_PresentazioneProgetto.pptx.pdf
-├── src/
-│   ├── backend/
-│   │   ├── app/
-│   │   │   └── server.js      # Server Express + API REST + autenticazione
-│   │   └── vision/
-│   │       └── detector.py    # Estrazione Face/Body ROI con OpenCV + YOLOv8
-│   └── frontend/
-│       ├── index.html         # Interfaccia principale
-│       ├── style.css          # Stile
-│       ├── app.js             # Logica core: login, DPI, fasi, Dialogflow
-│       ├── overlays.js        # Gestione overlay ROI e classificazioni
-│       └── storico.js         # Gestione modale storico e statistiche
 ├── package.json
 ├── package-lock.json
 ├── requirements.txt
@@ -199,19 +197,19 @@ lab-safe/
 
 ```bash
 # Avvia il microservizio HTTP usato dall'applicazione (avviato automaticamente da npm start)
-python src/backend/vision/detector.py --mode server
+python ai_service/src/detector.py --mode server
 
 # Elabora una cartella di immagini ed esporta le ROI nel dataset (percorso default: data/raw/)
-python src/backend/vision/detector.py --mode folder --source /percorso/cartella
+python ai_service/src/detector.py --mode folder --source /percorso/cartella
 
 # Elabora una cartella con output personalizzato
-python src/backend/vision/detector.py --mode folder --source /percorso/cartella --output /percorso/output
+python ai_service/src/detector.py --mode folder --source /percorso/cartella --output /percorso/output
 
 # Testa su una singola immagine
-python src/backend/vision/detector.py --mode image --source /percorso/immagine.jpg
+python ai_service/src/detector.py --mode image --source /percorso/immagine.jpg
 
 # Testa in tempo reale con webcam
-python src/backend/vision/detector.py --mode webcam
+python ai_service/src/detector.py --mode webcam
 ```
 
 > Formati supportati: JPG, PNG, BMP, HEIC, HEIF.  

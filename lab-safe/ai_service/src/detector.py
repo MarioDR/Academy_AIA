@@ -15,9 +15,9 @@ from pillow_heif import register_heif_opener
 register_heif_opener()
 
 TARGET_SIZE = (224, 224)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-DEFAULT_MODEL_PATH = os.path.join(BASE_DIR, "data", "models", "yolov8n-pose.pt")
+DEFAULT_MODEL_PATH = os.path.join(BASE_DIR, "ai_service", "models", "yolov8n-pose.pt")
 DEFAULT_FACE_RAW_DIR = os.path.join(BASE_DIR, "data", "raw", "Face")
 DEFAULT_BODY_RAW_DIR = os.path.join(BASE_DIR, "data", "raw", "Full-Body")
 

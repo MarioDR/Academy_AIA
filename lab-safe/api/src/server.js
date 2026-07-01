@@ -7,7 +7,7 @@
  * Inizializzazione ambiente e dipendenze.
  */
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '../../../config/env.txt') });
+require('dotenv').config({ path: path.join(__dirname, '../../config/env.txt') });
 
 const express  = require('express');
 const Database = require('better-sqlite3');
@@ -19,7 +19,7 @@ const PORT = process.env.PORT || 3000;
 /**
  * Inizializzazione database SQLite.
  */
-const dbPath = path.join(__dirname, '../../../database/labsafe.db');
+const dbPath = path.join(__dirname, '../../database/labsafe.db');
 const db = new Database(dbPath);
 
 db.exec(`
@@ -154,9 +154,9 @@ app.post('/api/process-frame', async function(req, res) {
 /**
  * Rotte per i file statici e modelli.
  */
-app.use(express.static(path.join(__dirname, '../../frontend')));
+app.use(express.static(path.join(__dirname, '../../web')));
 
-app.use('/models', express.static(path.join(__dirname, '../../../data/models/teachable_machine')));
+app.use('/models', express.static(path.join(__dirname, '../../data/models/teachable_machine')));
 
 /**
  * Endpoint: Elaborazione testuale/vocale tramite Dialogflow.
@@ -168,7 +168,7 @@ app.post('/api/dialogflow', function(req, res) {
   var sessionId = body.sessionId || 'user-001';
   var config = {};
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    config.keyFilename = path.join(__dirname, '../../../config/credentials.json');
+    config.keyFilename = path.join(__dirname, '../../config/credentials.json');
   }
 
   var client  = new dialogflow.SessionsClient(config);
@@ -291,11 +291,11 @@ app.get('/api/statistiche', function(req, res) {
  * Rotta root: Serve la Single Page Application.
  */
 app.get('/', function(req, res) {
-  res.sendFile(path.join(__dirname, '../../frontend/index.html'));
+  res.sendFile(path.join(__dirname, '../../web/index.html'));
 });
 
 const { spawn } = require('child_process');
-const pythonProcess = spawn('python', [path.join(__dirname, '../vision/detector.py'), '--mode', 'server']);
+const pythonProcess = spawn('python', [path.join(__dirname, '../../ai_service/src/detector.py'), '--mode', 'server']);
 
 pythonProcess.stdout.on('data', (data) => console.log(`[YOLOv8]: ${data.toString().trim()}`));
 pythonProcess.stderr.on('data', (data) => console.log(`[YOLOv8 Log]: ${data.toString().trim()}`));
