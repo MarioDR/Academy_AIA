@@ -119,7 +119,7 @@ GOOGLE_APPLICATION_CREDENTIALS=./config/credentials.json
 PORT=3000
 ```
  
-> Il Project ID `newagent-jgxd` è fisso — è il progetto Google Cloud del Gruppo 11.  
+> Il Project ID `newagent-jgxd` è fisso — è il progetto Google Cloud.  
 > L'agente Dialogflow associato si chiama **Academy_AIA_Gruppo11**.
  
 ---
@@ -165,23 +165,28 @@ lab-safe/
 │   ├── overlays.js            # Gestione overlay ROI e classificazioni
 │   └── storico.js             # Gestione modale storico e statistiche
 ├── ai_service/
-│   ├── src/
-│   │   └── detector.py        # Estrazione Face/Body ROI con OpenCV + YOLOv8
-│   └── models/
-│       └── yolov8n-pose.pt    # Modello YOLOv8 Pose
+│   └── src/
+│       └── detector.py        # Estrazione Face/Body ROI con OpenCV + YOLOv8
 ├── config/
 │   ├── credentials.json       # Credenziali Google Cloud
 │   └── env.txt                # Variabili d'ambiente
 ├── data/
 │   ├── models/
+│   │   ├── yolov8n-pose.pt    # Modello YOLOv8 Pose
 │   │   └── teachable_machine/
 │   │       ├── face/          # Modello TM — Face
 │   │       └── full_body/     # Modello TM — Full Body
 │   └── raw/
+│       ├── Face/              # Dataset grezzo volti (per TM)
+│       └── Full-Body/         # Dataset grezzo corpo (per TM)
 ├── database/
 │   └── labsafe.db             # Database SQLite
 ├── demo/
+│   ├── demo_labsafe.txt       # Script demo
+│   └── test_*.png             # Immagini di test per la demo
 ├── docs/
+│   ├── AIA_G11_PropostaProgettuale.pdf
+│   └── AIA_Gruppo11_PresentazioneProgetto.pptx.pdf
 ├── package.json
 ├── package-lock.json
 ├── requirements.txt
