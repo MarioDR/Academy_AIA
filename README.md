@@ -83,7 +83,7 @@ Gli utenti che possono accedere al laboratorio sono predefiniti in un database S
 
 ---
 
-## Installazione e avvio
+## Installazione e avvio (all'interno dell'ambiente virtuale)
 
 > ⚠️ Prima di avviare l'applicazione, leggi la sezione **Configurazione** e completa i 3 punti.
 

@@ -103,7 +103,7 @@ REQUISITI
 
 ================================================================================
 
-INSTALLAZIONE E AVVIO
+INSTALLAZIONE E AVVIO (all'interno dell'ambiente virtuale)
 -- Attenzione⚠️ Prima di avviare l'applicazione, leggi la sezione CONFIGURAZIONE e completa i 3 punti.
 
   # 1. Caricare la cartella su VSCode
